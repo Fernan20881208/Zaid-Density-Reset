@@ -105,10 +105,8 @@ public final class DensityBridge {
                 density,
                 userId
         );
-        waitForWindowManager();
-
         int initial = getInitialDensity(windowManager);
-        int current = getCurrentDensity(windowManager);
+        int current = waitForDensity(windowManager, density);
         if (current != density) {
             printError(
                     "VERIFY_FAILED",
@@ -127,10 +125,8 @@ public final class DensityBridge {
                 Display.DEFAULT_DISPLAY,
                 userId
         );
-        waitForWindowManager();
-
         int initial = getInitialDensity(windowManager);
-        int current = getCurrentDensity(windowManager);
+        int current = waitForDensity(windowManager, initial);
         if (current != initial) {
             printError(
                     "VERIFY_FAILED",
@@ -190,12 +186,18 @@ public final class DensityBridge {
         }
     }
 
-    private static void waitForWindowManager() {
-        try {
-            Thread.sleep(350L);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
+    private static int waitForDensity(Object windowManager, int expected) throws Exception {
+        int current = getCurrentDensity(windowManager);
+        for (int attempt = 0; attempt < 20 && current != expected; attempt++) {
+            try {
+                Thread.sleep(100L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            current = getCurrentDensity(windowManager);
         }
+        return current;
     }
 
     private static void printSuccess(int initial, int current, boolean hasOverride) {
