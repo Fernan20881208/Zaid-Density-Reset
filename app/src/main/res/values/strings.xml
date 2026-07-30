@@ -69,10 +69,8 @@
     <string name="unexpected_error">Error inesperado: %1$s</string>
     <string name="test_accessibility_notice">El botón puede funcionar sin accesibilidad; habilítala para usar el gesto.</string>
 
-    <string name="privacy_note">Privado, sin anuncios, analíticas ni lectura de pantalla.</string>
-    <string name="gesture_instruction">Mantén ambos botones de volumen durante 2 segundos.</string>
     <string name="contact_description">Soporte, sugerencias y novedades del proyecto.</string>
-    <string name="instagram_username">zaid.nvr</string>
-    <string name="instagram_button">Instagram · @zaid.nvr</string>
+    <string name="instagram_username">Zaid.nvr</string>
+    <string name="instagram_button">Instagram · @Zaid.nvr</string>
     <string name="developed_by">Developed by: Zaid Navarro</string>
 </resources>
