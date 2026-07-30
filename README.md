@@ -21,6 +21,16 @@ La interfaz utiliza el estilo visual **Liquid Glass** del proyecto y el paquete 
 - Vibración breve opcional después de un restablecimiento correcto.
 - Contacto directo con Instagram `@Zaid.nvr`.
 
+## Identidad visual
+
+La versión `1.2.1` conserva la interfaz Liquid Glass y sustituye exclusivamente sus recursos de marca:
+
+- `file (1).svg` se utiliza como logo del encabezado y como icono de la aplicación.
+- `file.svg` se utiliza como fondo principal de la pantalla.
+- Ambos SVG se renderizan como WebP optimizados y su SHA-256 se comprueba durante la compilación para evitar recursos incompletos o alterados.
+
+Este cambio visual no modifica el controlador de densidad, Binder de WindowManager, Shizuku, DataStore ni el servicio de accesibilidad.
+
 ## Por qué 20 DPI no usa `wm density 20`
 
 `WindowManagerShellCommand` valida el valor antes de enviarlo al servicio y normalmente rechaza densidades inferiores a 72. Por eso Sensi Ultra no se implementa ejecutando el comando estándar.
@@ -125,7 +135,7 @@ Usa Preferences DataStore para guardar:
 
 - Densidad original.
 - Último perfil seleccionado.
-- Última densidad aplicada.
+- Último DPI aplicado.
 - Existencia de override.
 - Fecha y hora del último cambio.
 
@@ -177,7 +187,7 @@ El APK queda en:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-La versión `1.2.0` añade DPI múltiple y se publica automáticamente como Release al fusionar el commit de lanzamiento en `main`.
+La versión `1.2.1` actualiza el logo y el fondo desde los SVG proporcionados y se publica automáticamente como Release al fusionar el commit de lanzamiento en `main`.
 
 ## Archivos principales
 
