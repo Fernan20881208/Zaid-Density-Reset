@@ -1,6 +1,7 @@
 # Shizuku starts this class by its exact name in a separate app_process.
 -keep class com.zaid.densityreset.shizuku.PrivilegedDensityService {
     public <init>();
+    public <init>(android.content.Context);
     *;
 }
 
