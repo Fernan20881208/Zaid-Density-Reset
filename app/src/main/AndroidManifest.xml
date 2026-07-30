@@ -13,9 +13,9 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
-        android:icon="@drawable/zaid_logo"
+        android:icon="@drawable/ic_zaid_minimal"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/zaid_logo"
+        android:roundIcon="@drawable/ic_zaid_minimal"
         android:supportsRtl="true"
         android:theme="@style/Theme.DensityReset">
 
