@@ -15,8 +15,8 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.2.0"
+        versionCode = 8
+        versionName = "1.2.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -59,36 +59,86 @@ android {
 }
 
 val generatedBrandResDir = layout.buildDirectory.dir("generated/brandRes")
+val generatedBrandSourceDir = layout.buildDirectory.dir("generated/brandSource")
 
-android.sourceSets.getByName("main").res.srcDir(generatedBrandResDir)
+android.sourceSets.getByName("main").apply {
+    res.srcDir(generatedBrandResDir)
+    java.srcDir(generatedBrandSourceDir)
+}
 
 val decodeBrandAssets by tasks.registering {
-    val sourceFile = layout.projectDirectory.file("src/main/brand/zaid_logo.base64")
-    val outputFile = generatedBrandResDir.map {
+    val logoSource = layout.projectDirectory.file("src/main/brand/zaid_logo.base64")
+    val backgroundSources = listOf(
+        "src/main/brand/background_parts/part0.base64",
+        "src/main/brand/background_parts/part1_0.base64",
+        "src/main/brand/background_parts/part1_1.base64",
+        "src/main/brand/background_parts/part1_2.base64",
+        "src/main/brand/background_parts/part1_3.base64",
+        "src/main/brand/background_parts/part1_4.base64"
+    ).map(layout.projectDirectory::file)
+
+    val logoOutput = generatedBrandResDir.map {
         it.file("drawable-nodpi/zaid_logo.webp")
     }
+    val imageAssetsOutput = generatedBrandSourceDir.map {
+        it.file("com/zaid/densityreset/util/ImageAssets.kt")
+    }
 
-    inputs.file(sourceFile)
-    outputs.file(outputFile)
+    inputs.files(listOf(logoSource) + backgroundSources)
+    outputs.files(logoOutput, imageAssetsOutput)
 
     doLast {
-        val destination = outputFile.get().asFile
-        destination.parentFile.mkdirs()
+        fun sha256(bytes: ByteArray): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { byte -> "%02x".format(byte) }
 
-        // Normaliza una transcripción dañada del recurso y comprueba que el
-        // binario generado sea exactamente el retrato proporcionado por Zaid.
-        val encoded = sourceFile.asFile.readText().trim().replace(
-            "SZgBGKeEN15y6229HByBFb",
-            "SZgBGKeEN15i6229HByBFb"
+        val logoBytes = Base64.getDecoder().decode(
+            logoSource.asFile.readText().trim()
         )
-        val decoded = Base64.getDecoder().decode(encoded)
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(decoded)
-            .joinToString("") { byte -> "%02x".format(byte) }
-        check(digest == "1d1c3dcc2dfe09bc595f9acbe35689b69a1bcbe93e02fb6e5ec63f77d4c0bd23") {
-            "El recurso del logo no coincide con la imagen original."
+        check(
+            sha256(logoBytes) ==
+                "8cbc6a8fb470c03c29482b395af8d5ce95f8a5d8bb71e5172d5e8ebf173a1b89"
+        ) {
+            "El recurso generado no coincide con file (1).svg."
         }
-        destination.writeBytes(decoded)
+        logoOutput.get().asFile.apply {
+            parentFile.mkdirs()
+            writeBytes(logoBytes)
+        }
+
+        val backgroundBase64 = backgroundSources.joinToString(separator = "") {
+            it.asFile.readText().trim()
+        }
+        val backgroundBytes = Base64.getDecoder().decode(backgroundBase64)
+        check(
+            sha256(backgroundBytes) ==
+                "8c09653f8ef00cead504548f255d79a18851a4c807330acbf54be158087c3783"
+        ) {
+            "El recurso generado no coincide con file.svg."
+        }
+
+        imageAssetsOutput.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(
+                buildString {
+                    appendLine("package com.zaid.densityreset.util")
+                    appendLine()
+                    appendLine("object ImageAssets {")
+                    appendLine("    const val BACKGROUND_BASE64: String =")
+                    backgroundBase64.chunked(4_000).forEachIndexed { index, chunk ->
+                        append("        \"")
+                        append(chunk)
+                        append("\"")
+                        if (index != backgroundBase64.chunked(4_000).lastIndex) {
+                            append(" +")
+                        }
+                        appendLine()
+                    }
+                    appendLine("}")
+                }
+            )
+        }
     }
 }
 
