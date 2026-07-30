@@ -1,11 +1,6 @@
-# Shizuku starts this class by its exact name in a separate app_process.
--keep class com.zaid.densityreset.shizuku.PrivilegedDensityService {
-    public <init>();
-    public <init>(android.content.Context);
-    *;
+# Density Reset invokes Shizuku's legacy remote-process bridge by reflection.
+# Keep the private method name and its Process wrapper in minified release builds.
+-keepclassmembers class rikka.shizuku.Shizuku {
+    private static rikka.shizuku.ShizukuRemoteProcess newProcess(java.lang.String[], java.lang.String[], java.lang.String);
 }
-
-# Preserve the AIDL contract and generated Binder implementation.
--keep interface com.zaid.densityreset.IPrivilegedDensityService { *; }
--keep class com.zaid.densityreset.IPrivilegedDensityService$Stub { *; }
--keep class com.zaid.densityreset.IPrivilegedDensityService$Stub$Proxy { *; }
+-keep class rikka.shizuku.ShizukuRemoteProcess { *; }
