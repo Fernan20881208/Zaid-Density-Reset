@@ -31,6 +31,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.accessibility.VolumeShortcutAccessibilityService
 import com.zaid.densityreset.databinding.ActivityMainBinding
 import com.zaid.densityreset.databinding.DialogUltraConfirmationBinding
+import com.zaid.densityreset.databinding.ViewDensityPanelBinding
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.density.DensityUiState
 import com.zaid.densityreset.density.DensityViewModel
@@ -45,6 +46,7 @@ import java.util.Date
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var densityBinding: ViewDensityPanelBinding
     private val densityViewModel: DensityViewModel by viewModels()
 
     private val stateListener: (ShizukuManager.State) -> Unit = { state ->
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         configureBranding()
         applySystemBarInsets()
+        attachDensityPanel()
 
         configurePreferences()
         configureActions()
@@ -82,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
             binding.backgroundImage.setImageBitmap(bitmap)
         }
+        binding.headerLogo.setImageResource(R.drawable.zaid_logo)
     }
 
     private fun decodeImage(encoded: String): Bitmap? = runCatching {
@@ -96,6 +100,14 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun attachDensityPanel() {
+        densityBinding = ViewDensityPanelBinding.inflate(layoutInflater)
+        val testCard = binding.buttonTest.parent as View
+        val contentContainer = testCard.parent as ViewGroup
+        val testIndex = contentContainer.indexOfChild(testCard)
+        contentContainer.addView(densityBinding.root, testIndex)
     }
 
     private fun configurePreferences() {
@@ -143,19 +155,19 @@ class MainActivity : AppCompatActivity() {
             openInstagramProfile()
         }
 
-        binding.presetUltra.setOnClickListener {
+        densityBinding.presetUltra.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             showUltraConfirmation()
         }
-        binding.presetHigh.setOnClickListener {
+        densityBinding.presetHigh.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             densityViewModel.applyPreset(DensityPreset.HIGH)
         }
-        binding.presetLow.setOnClickListener {
+        densityBinding.presetLow.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             densityViewModel.applyPreset(DensityPreset.LOW)
         }
-        binding.buttonEmergencyReset.setOnClickListener {
+        densityBinding.buttonEmergencyReset.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             densityViewModel.resetDensity()
         }
@@ -170,30 +182,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderDensityState(state: DensityUiState) {
-        binding.densityStatus.text = state.statusLabel
-        binding.densityCurrentValue.text = state.currentDensity?.let {
+        densityBinding.densityStatus.text = state.statusLabel
+        densityBinding.densityCurrentValue.text = state.currentDensity?.let {
             getString(R.string.current_density_value, it)
         } ?: getString(R.string.current_density_unknown)
 
         val selected = state.activePreset
-        binding.presetUltra.isSelected = selected == DensityPreset.ULTRA
-        binding.presetHigh.isSelected = selected == DensityPreset.HIGH
-        binding.presetLow.isSelected = selected == DensityPreset.LOW
+        densityBinding.presetUltra.isSelected = selected == DensityPreset.ULTRA
+        densityBinding.presetHigh.isSelected = selected == DensityPreset.HIGH
+        densityBinding.presetLow.isSelected = selected == DensityPreset.LOW
 
-        binding.presetUltraState.text = presetStateText(selected == DensityPreset.ULTRA)
-        binding.presetHighState.text = presetStateText(selected == DensityPreset.HIGH)
-        binding.presetLowState.text = presetStateText(selected == DensityPreset.LOW)
+        densityBinding.presetUltraState.text = presetStateText(selected == DensityPreset.ULTRA)
+        densityBinding.presetHighState.text = presetStateText(selected == DensityPreset.HIGH)
+        densityBinding.presetLowState.text = presetStateText(selected == DensityPreset.LOW)
 
-        binding.densityProgressContainer.visibility =
+        densityBinding.densityProgressContainer.visibility =
             if (state.isApplying || state.isRefreshing) View.VISIBLE else View.GONE
-        binding.densityProgressText.text = if (state.isApplying) {
+        densityBinding.densityProgressText.text = if (state.isApplying) {
             getString(R.string.applying_configuration)
         } else {
             getString(R.string.reading_density)
         }
 
-        binding.densityOperationMessage.text = state.operationMessage
-        binding.densityOperationMessage.setTextColor(
+        densityBinding.densityOperationMessage.text = state.operationMessage
+        densityBinding.densityOperationMessage.setTextColor(
             color(
                 when {
                     state.operationMessage == getString(R.string.dpi_applied_successfully) ||
@@ -209,7 +221,7 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        binding.densityLastChange.text = state.lastChangedAt?.let { timestamp ->
+        densityBinding.densityLastChange.text = state.lastChangedAt?.let { timestamp ->
             getString(
                 R.string.last_density_change,
                 DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
@@ -218,10 +230,10 @@ class MainActivity : AppCompatActivity() {
         } ?: getString(R.string.no_density_changes)
 
         val enabled = !state.isApplying && !state.isRefreshing
-        binding.presetUltra.isEnabled = enabled
-        binding.presetHigh.isEnabled = enabled
-        binding.presetLow.isEnabled = enabled
-        binding.buttonEmergencyReset.isEnabled = !state.isApplying
+        densityBinding.presetUltra.isEnabled = enabled
+        densityBinding.presetHigh.isEnabled = enabled
+        densityBinding.presetLow.isEnabled = enabled
+        densityBinding.buttonEmergencyReset.isEnabled = !state.isApplying
     }
 
     private fun presetStateText(active: Boolean): String =
@@ -296,9 +308,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        dialogBinding.buttonApplyUltra.setOnClickListener {
-            it.performClick()
-        }
         dialogBinding.buttonCancelUltra.setOnClickListener {
             resetHoldState()
             dialog.dismiss()
