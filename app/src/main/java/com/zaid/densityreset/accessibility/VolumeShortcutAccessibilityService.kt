@@ -9,12 +9,27 @@ import android.os.VibratorManager
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import com.zaid.densityreset.density.DensityPreferencesRepository
+import com.zaid.densityreset.density.ShizukuDensityController
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AppPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class VolumeShortcutAccessibilityService : AccessibilityService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val densityController by lazy {
+        ShizukuDensityController(applicationContext)
+    }
+    private val densityPreferences by lazy {
+        DensityPreferencesRepository(applicationContext)
+    }
 
     private var volumeUpPressed = false
     private var volumeDownPressed = false
@@ -97,9 +112,27 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     }
 
     private fun executeDensityReset() {
-        ShizukuManager.resetDensity { result ->
-            Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
-            if (result.success && AppPreferences.shouldVibrateAfterSuccess(this)) {
+        serviceScope.launch {
+            val result = densityController.resetDensity()
+            val message = result.fold(
+                onSuccess = {
+                    densityController.getSystemState().getOrNull()?.let { state ->
+                        densityPreferences.saveReset(state)
+                    }
+                    "DPI restablecido correctamente."
+                },
+                onFailure = { error ->
+                    error.message ?: "No fue posible acceder a WindowManager."
+                }
+            )
+
+            Toast.makeText(
+                this@VolumeShortcutAccessibilityService,
+                message,
+                Toast.LENGTH_LONG
+            ).show()
+
+            if (result.isSuccess && AppPreferences.shouldVibrateAfterSuccess(this@VolumeShortcutAccessibilityService)) {
                 vibrateBriefly()
             }
         }
@@ -132,7 +165,6 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // El callback es obligatorio, pero el servicio no solicita ni procesa contenido de pantalla.
         event ?: return
     }
 
@@ -142,6 +174,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         resetGestureState()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
