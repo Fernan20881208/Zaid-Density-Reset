@@ -69,6 +69,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.buttonReconnectUserService.setOnClickListener {
+            showMessage(ShizukuManager.reconnectUserService())
+        }
+
         binding.buttonAccessibilitySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -145,18 +149,28 @@ class MainActivity : AppCompatActivity() {
             if (state.permissionGranted) R.color.status_success else R.color.status_warning
         )
 
+        val userServiceText = when {
+            state.userServiceConnected -> R.string.status_user_service_connected
+            state.bindingInProgress -> R.string.status_user_service_connecting
+            else -> R.string.status_user_service_disconnected
+        }
+        val userServiceColor = when {
+            state.userServiceConnected -> R.color.status_success
+            state.bindingInProgress -> R.color.status_warning
+            else -> R.color.status_error
+        }
         setStatus(
             binding.statusUserService,
             getString(R.string.label_user_service),
-            getString(
-                if (state.userServiceConnected) R.string.status_user_service_connected
-                else R.string.status_user_service_disconnected
-            ),
-            if (state.userServiceConnected) R.color.status_success else R.color.status_warning
+            getString(userServiceText),
+            userServiceColor
         )
 
+        binding.shizukuDiagnostics.text = ShizukuManager.buildDiagnosticText(state)
         binding.buttonRequestPermission.isEnabled = state.running && !state.permissionGranted
         binding.buttonOpenShizuku.isEnabled = state.installed
+        binding.buttonReconnectUserService.isEnabled =
+            state.running && state.permissionGranted && !state.bindingInProgress
     }
 
     private fun renderAccessibilityState() {
