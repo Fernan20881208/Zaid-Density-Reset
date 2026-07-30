@@ -1,5 +1,6 @@
 package com.zaid.densityreset.shizuku
 
+import android.content.Context
 import android.util.Log
 import androidx.annotation.Keep
 import com.zaid.densityreset.IPrivilegedDensityService
@@ -14,7 +15,12 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
 @Keep
-class PrivilegedDensityService : IPrivilegedDensityService.Stub() {
+class PrivilegedDensityService() : IPrivilegedDensityService.Stub() {
+
+    @Keep
+    constructor(context: Context) : this() {
+        Log.i(TAG, "UserService creado con Context para ${context.packageName}")
+    }
 
     init {
         Log.i(TAG, "UserService creado")
