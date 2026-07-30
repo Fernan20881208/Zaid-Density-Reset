@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -34,10 +34,27 @@ jobs:
       - name: Compilar APK debug
         run: ./gradlew clean assembleDebug
 
+      - name: Preparar nombre de distribución
+        run: cp app/build/outputs/apk/debug/app-debug.apk DensityReset-Zaid-v1.2.0.apk
+
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: DensityReset-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: DensityReset-Zaid-v1.2.0-apk
+          path: DensityReset-Zaid-v1.2.0.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publicar Release 1.2.0
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          contains(github.event.head_commit.message, 'release: Density Reset 1.2.0')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create v1.2.0
+          DensityReset-Zaid-v1.2.0.apk#DensityReset-Zaid-v1.2.0.apk
+          --target "$GITHUB_SHA"
+          --title "Density Reset 1.2.0 — DPI múltiple"
+          --notes-file RELEASE_NOTES_1.2.0.md

@@ -1,30 +1,53 @@
 package com.zaid.densityreset
 
+import android.animation.ObjectAnimator
+import android.app.Dialog
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.accessibility.VolumeShortcutAccessibilityService
 import com.zaid.densityreset.databinding.ActivityMainBinding
+import com.zaid.densityreset.databinding.DialogUltraConfirmationBinding
+import com.zaid.densityreset.databinding.ViewDensityPanelBinding
+import com.zaid.densityreset.density.DensityPreset
+import com.zaid.densityreset.density.DensityUiState
+import com.zaid.densityreset.density.DensityViewModel
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AccessibilityUtils
 import com.zaid.densityreset.util.AppPreferences
 import com.zaid.densityreset.util.ImageAssets
+import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var densityBinding: ViewDensityPanelBinding
+    private val densityViewModel: DensityViewModel by viewModels()
 
     private val stateListener: (ShizukuManager.State) -> Unit = { state ->
         renderShizukuState(state)
@@ -38,9 +61,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         configureBranding()
         applySystemBarInsets()
+        attachDensityPanel()
 
         configurePreferences()
         configureActions()
+        observeDensityState()
         ShizukuManager.addStateListener(stateListener)
     }
 
@@ -48,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         renderAccessibilityState()
         ShizukuManager.refresh()
+        densityViewModel.refresh()
     }
 
     override fun onDestroy() {
@@ -59,9 +85,7 @@ class MainActivity : AppCompatActivity() {
         decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
             binding.backgroundImage.setImageBitmap(bitmap)
         }
-        decodeImage(ImageAssets.LOGO_BASE64)?.let { bitmap ->
-            binding.headerLogo.setImageBitmap(bitmap)
-        }
+        binding.headerLogo.setImageResource(R.drawable.zaid_logo)
     }
 
     private fun decodeImage(encoded: String): Bitmap? = runCatching {
@@ -76,6 +100,14 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun attachDensityPanel() {
+        densityBinding = ViewDensityPanelBinding.inflate(layoutInflater)
+        val testCard = binding.buttonTest.parent as View
+        val contentContainer = testCard.parent as ViewGroup
+        val testIndex = contentContainer.indexOfChild(testCard)
+        contentContainer.addView(densityBinding.root, testIndex)
     }
 
     private fun configurePreferences() {
@@ -105,6 +137,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.buttonReconnectUserService.setOnClickListener {
             showMessage(ShizukuManager.reconnectUserService())
+            densityViewModel.refresh()
         }
 
         binding.buttonAccessibilitySettings.setOnClickListener {
@@ -121,6 +154,173 @@ class MainActivity : AppCompatActivity() {
         binding.buttonInstagram.setOnClickListener {
             openInstagramProfile()
         }
+
+        densityBinding.presetUltra.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            showUltraConfirmation()
+        }
+        densityBinding.presetHigh.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            densityViewModel.applyPreset(DensityPreset.HIGH)
+        }
+        densityBinding.presetLow.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            densityViewModel.applyPreset(DensityPreset.LOW)
+        }
+        densityBinding.buttonEmergencyReset.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            densityViewModel.resetDensity()
+        }
+    }
+
+    private fun observeDensityState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                densityViewModel.uiState.collect(::renderDensityState)
+            }
+        }
+    }
+
+    private fun renderDensityState(state: DensityUiState) {
+        densityBinding.densityStatus.text = state.statusLabel
+        densityBinding.densityCurrentValue.text = state.currentDensity?.let {
+            getString(R.string.current_density_value, it)
+        } ?: getString(R.string.current_density_unknown)
+
+        val selected = state.activePreset
+        densityBinding.presetUltra.isSelected = selected == DensityPreset.ULTRA
+        densityBinding.presetHigh.isSelected = selected == DensityPreset.HIGH
+        densityBinding.presetLow.isSelected = selected == DensityPreset.LOW
+
+        densityBinding.presetUltraState.text = presetStateText(selected == DensityPreset.ULTRA)
+        densityBinding.presetHighState.text = presetStateText(selected == DensityPreset.HIGH)
+        densityBinding.presetLowState.text = presetStateText(selected == DensityPreset.LOW)
+
+        densityBinding.densityProgressContainer.visibility =
+            if (state.isApplying || state.isRefreshing) View.VISIBLE else View.GONE
+        densityBinding.densityProgressText.text = if (state.isApplying) {
+            getString(R.string.applying_configuration)
+        } else {
+            getString(R.string.reading_density)
+        }
+
+        densityBinding.densityOperationMessage.text = state.operationMessage
+        densityBinding.densityOperationMessage.setTextColor(
+            color(
+                when {
+                    state.operationMessage == getString(R.string.dpi_applied_successfully) ||
+                        state.operationMessage == getString(R.string.dpi_reset_successfully) ->
+                        R.color.status_success
+                    state.operationMessage.startsWith("No ") ||
+                        state.operationMessage.startsWith("El ") ||
+                        state.operationMessage.startsWith("Shizuku") ||
+                        state.operationMessage.startsWith("Permiso") ->
+                        R.color.status_error
+                    else -> R.color.glass_text_secondary
+                }
+            )
+        )
+
+        densityBinding.densityLastChange.text = state.lastChangedAt?.let { timestamp ->
+            getString(
+                R.string.last_density_change,
+                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                    .format(Date(timestamp))
+            )
+        } ?: getString(R.string.no_density_changes)
+
+        val enabled = !state.isApplying && !state.isRefreshing
+        densityBinding.presetUltra.isEnabled = enabled
+        densityBinding.presetHigh.isEnabled = enabled
+        densityBinding.presetLow.isEnabled = enabled
+        densityBinding.buttonEmergencyReset.isEnabled = !state.isApplying
+    }
+
+    private fun presetStateText(active: Boolean): String =
+        getString(if (active) R.string.preset_active else R.string.preset_inactive)
+
+    private fun showUltraConfirmation() {
+        val dialog = Dialog(this)
+        val dialogBinding = DialogUltraConfirmationBinding.inflate(layoutInflater)
+        dialog.setContentView(dialogBinding.root)
+        dialog.setCancelable(true)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val handler = Handler(Looper.getMainLooper())
+        var confirmed = false
+        var progressAnimator: ObjectAnimator? = null
+
+        val confirmRunnable = Runnable {
+            confirmed = true
+            dialogBinding.buttonApplyUltra.performHapticFeedback(
+                HapticFeedbackConstants.LONG_PRESS
+            )
+            dialog.dismiss()
+            densityViewModel.applyPreset(DensityPreset.ULTRA)
+        }
+
+        fun resetHoldState() {
+            handler.removeCallbacks(confirmRunnable)
+            progressAnimator?.cancel()
+            dialogBinding.ultraHoldProgress.progress = 0
+            dialogBinding.buttonApplyUltra.text =
+                getString(R.string.hold_to_apply_ultra)
+            dialogBinding.buttonApplyUltra.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(120L)
+                .start()
+        }
+
+        dialogBinding.buttonApplyUltra.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    confirmed = false
+                    view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    dialogBinding.buttonApplyUltra.text =
+                        getString(R.string.keep_holding)
+                    dialogBinding.buttonApplyUltra.animate()
+                        .scaleX(0.98f)
+                        .scaleY(0.98f)
+                        .setDuration(120L)
+                        .start()
+                    progressAnimator = ObjectAnimator.ofInt(
+                        dialogBinding.ultraHoldProgress,
+                        "progress",
+                        0,
+                        100
+                    ).apply {
+                        duration = ULTRA_CONFIRM_HOLD_MILLIS
+                        start()
+                    }
+                    handler.postDelayed(confirmRunnable, ULTRA_CONFIRM_HOLD_MILLIS)
+                    true
+                }
+
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL,
+                MotionEvent.ACTION_OUTSIDE -> {
+                    if (!confirmed) resetHoldState()
+                    true
+                }
+
+                else -> true
+            }
+        }
+
+        dialogBinding.buttonCancelUltra.setOnClickListener {
+            resetHoldState()
+            dialog.dismiss()
+        }
+        dialog.setOnDismissListener {
+            resetHoldState()
+        }
+
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun openInstagramProfile() {
@@ -168,6 +368,7 @@ class MainActivity : AppCompatActivity() {
                 color(if (result.success) R.color.status_success else R.color.status_error)
             )
             showMessage(result.message)
+            if (result.success) densityViewModel.recordExternalReset()
         }
     }
 
@@ -268,5 +469,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMessage(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private companion object {
+        const val ULTRA_CONFIRM_HOLD_MILLIS = 1_500L
     }
 }

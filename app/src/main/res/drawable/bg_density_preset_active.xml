@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <gradient
+                android:angle="315"
+                android:startColor="@color/density_preset_active_start"
+                android:centerColor="@color/density_preset_active_center"
+                android:endColor="@color/density_preset_active_end" />
+            <stroke
+                android:width="1.5dp"
+                android:color="@color/density_preset_active_border" />
+        </shape>
+    </item>
+    <item android:left="18dp" android:right="18dp" android:top="1dp">
+        <shape android:shape="rectangle">
+            <size android:height="1dp" />
+            <corners android:radius="1dp" />
+            <solid android:color="@color/density_preset_reflection" />
+        </shape>
+    </item>
+</layer-list>

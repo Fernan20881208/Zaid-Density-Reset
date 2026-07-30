@@ -35,6 +35,20 @@
     <color name="glass_orb_cyan">#7054EAF4</color>
     <color name="glass_orb_violet">#704B42C8</color>
 
+    <color name="density_preset_active_start">#E04A6587</color>
+    <color name="density_preset_active_center">#D12C4467</color>
+    <color name="density_preset_active_end">#C51B2B49</color>
+    <color name="density_preset_active_border">#D09DEAF4</color>
+    <color name="density_preset_inactive_start">#C82B3A54</color>
+    <color name="density_preset_inactive_center">#B8202F49</color>
+    <color name="density_preset_inactive_end">#AC15233A</color>
+    <color name="density_preset_inactive_border">#78FFFFFF</color>
+    <color name="density_preset_reflection">#BFFFFFFF</color>
+    <color name="density_preset_reflection_muted">#70FFFFFF</color>
+    <color name="dialog_glass_start">#F5213049</color>
+    <color name="dialog_glass_center">#F215233B</color>
+    <color name="dialog_glass_end">#F50A1325</color>
+
     <color name="status_success">#98F0BC</color>
     <color name="status_warning">#FFD28E</color>
     <color name="status_error">#FFBBB4</color>

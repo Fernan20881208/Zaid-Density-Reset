@@ -6,6 +6,7 @@
     <string name="section_shizuku">Estado de Shizuku</string>
     <string name="section_accessibility">Atajo de accesibilidad</string>
     <string name="section_settings">Preferencias</string>
+    <string name="section_multi_dpi">DPI múltiple</string>
     <string name="section_test">Prueba rápida</string>
     <string name="section_contact">Contacto</string>
 
@@ -51,6 +52,35 @@
 
     <string name="accessibility_service_label">Atajo de volumen de Density Reset</string>
     <string name="accessibility_service_description">Detecta únicamente la pulsación simultánea de Volumen arriba y Volumen abajo durante 2 segundos para solicitar a Shizuku el restablecimiento de la densidad. No inspecciona ventanas ni contenido de otras aplicaciones.</string>
+
+    <string name="preset_ultra_title">Sensi Ultra</string>
+    <string name="preset_ultra_dpi">20 DPI</string>
+    <string name="preset_ultra_description">Sensibilidad extrema</string>
+    <string name="preset_high_title">Sensi Alta</string>
+    <string name="preset_high_dpi">72 DPI</string>
+    <string name="preset_high_description">Sensibilidad alta</string>
+    <string name="preset_low_title">Sensi Baja</string>
+    <string name="preset_low_dpi">280 DPI</string>
+    <string name="preset_low_description">Sensibilidad estable</string>
+    <string name="preset_active">Activo</string>
+    <string name="preset_inactive">Inactivo</string>
+    <string name="reading_density">Comprobando DPI…</string>
+    <string name="current_density_unknown">DPI real: desconocido</string>
+    <string name="current_density_value">DPI real: %1$d</string>
+    <string name="select_density_profile">Selecciona un perfil para aplicarlo.</string>
+    <string name="applying_configuration">Aplicando configuración…</string>
+    <string name="dpi_applied_successfully">DPI aplicado correctamente</string>
+    <string name="dpi_reset_successfully">DPI restablecido correctamente.</string>
+    <string name="emergency_reset_density">Restablecer DPI de emergencia</string>
+    <string name="no_density_changes">Sin cambios registrados.</string>
+    <string name="last_density_change">Último cambio: %1$s</string>
+
+    <string name="ultra_confirmation_title">Confirmar Sensi Ultra</string>
+    <string name="ultra_confirmation_warning">Esta configuración reduce considerablemente el tamaño de la interfaz. Podrás restablecerla manteniendo presionados ambos botones de volumen durante 2 segundos.</string>
+    <string name="ultra_hold_instruction">Mantén presionado el botón durante aproximadamente 1.5 segundos.</string>
+    <string name="hold_to_apply_ultra">Aplicar Sensi Ultra · mantener</string>
+    <string name="keep_holding">Sigue presionando…</string>
+    <string name="cancel">Cancelar</string>
 
     <string name="result_waiting">El resultado aparecerá aquí.</string>
     <string name="density_reset_success">Densidad restablecida correctamente.</string>
