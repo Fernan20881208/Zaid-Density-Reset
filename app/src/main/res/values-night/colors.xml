@@ -1,20 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#BBC3FF</color>
-    <color name="on_primary">#0D247F</color>
-    <color name="primary_container">#293C9F</color>
-    <color name="on_primary_container">#DEE1FF</color>
-    <color name="secondary">#C4C5DD</color>
-    <color name="on_secondary">#2D2F42</color>
-    <color name="surface">#131318</color>
-    <color name="on_surface">#E4E1E9</color>
-    <color name="surface_variant">#47464F</color>
-    <color name="on_surface_variant">#C8C5D0</color>
-    <color name="outline">#918F99</color>
+    <color name="primary">#AFC8FF</color>
+    <color name="on_primary">#071126</color>
+    <color name="primary_container">#3C5D8D</color>
+    <color name="on_primary_container">#F4F8FF</color>
+    <color name="secondary">#9DEAF4</color>
+    <color name="on_secondary">#06151A</color>
+    <color name="surface">#09111E</color>
+    <color name="on_surface">#F8FAFF</color>
+    <color name="surface_variant">#24364E</color>
+    <color name="on_surface_variant">#DCE8F8</color>
+    <color name="outline">#8AB9D7F2</color>
     <color name="error">#FFB4AB</color>
-    <color name="on_error">#690005</color>
-    <color name="status_success">#82DDA4</color>
-    <color name="status_warning">#FFB95F</color>
-    <color name="status_error">#FFB4AB</color>
-    <color name="launcher_background">#293C9F</color>
+    <color name="on_error">#65000A</color>
+
+    <color name="glass_bg_start">#07101F</color>
+    <color name="glass_bg_center">#172B47</color>
+    <color name="glass_bg_end">#080D17</color>
+    <color name="glass_text_primary">#FFFFFFFF</color>
+    <color name="glass_text_secondary">#E8EDF5FF</color>
+    <color name="glass_text_muted">#C0CFD9EA</color>
+    <color name="glass_panel_start">#EC1B2B42</color>
+    <color name="glass_panel_center">#E522344E</color>
+    <color name="glass_panel_end">#DE17283F</color>
+    <color name="glass_panel_border">#9AC8E5FF</color>
+    <color name="glass_header_start">#F01B2D47</color>
+    <color name="glass_header_end">#E216263D</color>
+    <color name="glass_accent">#AFC8FF</color>
+    <color name="glass_accent_secondary">#9DEAF4</color>
+    <color name="glass_button_text">#071126</color>
+    <color name="glass_button_secondary">#D8375374</color>
+    <color name="glass_button_secondary_pressed">#F04B698D</color>
+    <color name="glass_orb_blue">#8C668CFF</color>
+    <color name="glass_orb_cyan">#7054EAF4</color>
+    <color name="glass_orb_violet">#704B42C8</color>
+
+    <color name="status_success">#98F0BC</color>
+    <color name="status_warning">#FFD28E</color>
+    <color name="status_error">#FFBBB4</color>
+    <color name="launcher_background">#102746</color>
 </resources>

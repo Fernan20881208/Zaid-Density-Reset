@@ -1,18 +1,26 @@
 package com.zaid.densityreset
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Base64
 import android.view.View
+import android.widget.Toast
 import androidx.annotation.ColorRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.android.material.snackbar.Snackbar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.zaid.densityreset.accessibility.VolumeShortcutAccessibilityService
 import com.zaid.densityreset.databinding.ActivityMainBinding
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AccessibilityUtils
 import com.zaid.densityreset.util.AppPreferences
+import com.zaid.densityreset.util.ImageAssets
 
 class MainActivity : AppCompatActivity() {
 
@@ -24,9 +32,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
+        configureBranding()
+        applySystemBarInsets()
 
         configurePreferences()
         configureActions()
@@ -42,6 +53,29 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         ShizukuManager.removeStateListener(stateListener)
         super.onDestroy()
+    }
+
+    private fun configureBranding() {
+        decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
+            binding.backgroundImage.setImageBitmap(bitmap)
+        }
+        decodeImage(ImageAssets.LOGO_BASE64)?.let { bitmap ->
+            binding.headerLogo.setImageBitmap(bitmap)
+        }
+    }
+
+    private fun decodeImage(encoded: String): Bitmap? = runCatching {
+        val bytes = Base64.decode(encoded, Base64.DEFAULT)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    }.getOrNull()
+
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, systemBars.top, 0, systemBars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun configurePreferences() {
@@ -82,6 +116,33 @@ class MainActivity : AppCompatActivity() {
                 showMessage(getString(R.string.test_accessibility_notice))
             }
             executeTest()
+        }
+
+        binding.buttonInstagram.setOnClickListener {
+            openInstagramProfile()
+        }
+    }
+
+    private fun openInstagramProfile() {
+        val username = getString(R.string.instagram_username)
+        val instagramIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("instagram://user?username=$username")
+        ).apply {
+            setPackage("com.instagram.android")
+        }
+
+        val openedInApp = runCatching {
+            startActivity(instagramIntent)
+            true
+        }.getOrDefault(false)
+
+        if (!openedInApp) {
+            val browserIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.instagram.com/$username/")
+            )
+            runCatching { startActivity(browserIntent) }
         }
     }
 
@@ -206,6 +267,6 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.getColor(this, colorRes)
 
     private fun showMessage(message: String) {
-        Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show()
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 }

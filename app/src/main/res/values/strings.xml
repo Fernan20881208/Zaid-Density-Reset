@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Density Reset</string>
-    <string name="app_subtitle">Restablece la densidad con ambos botones de volumen</string>
+    <string name="app_subtitle">Control rápido de densidad con Shizuku</string>
 
     <string name="section_shizuku">Estado de Shizuku</string>
-    <string name="section_accessibility">Estado de accesibilidad</string>
-    <string name="section_settings">Configuración</string>
-    <string name="section_test">Prueba</string>
+    <string name="section_accessibility">Atajo de accesibilidad</string>
+    <string name="section_settings">Preferencias</string>
+    <string name="section_test">Prueba rápida</string>
+    <string name="section_contact">Contacto</string>
 
     <string name="status_checking">Comprobando…</string>
     <string name="status_line_format">● %1$s: %2$s</string>
@@ -30,28 +31,28 @@
 
     <string name="request_permission">Solicitar permiso</string>
     <string name="open_shizuku">Abrir Shizuku</string>
-    <string name="reconnect_user_service">Actualizar conexión Shizuku</string>
+    <string name="reconnect_user_service">Actualizar conexión</string>
     <string name="user_service_reconnect_started">Conexión de Shizuku actualizada.</string>
     <string name="direct_channel_refreshed">Canal directo de Shizuku listo.</string>
-    <string name="open_accessibility_settings">Abrir configuración de accesibilidad</string>
-    <string name="test_density_reset">Probar Density Reset</string>
+    <string name="open_accessibility_settings">Configurar accesibilidad</string>
+    <string name="test_density_reset">Restablecer densidad ahora</string>
     <string name="testing_density_reset">Ejecutando…</string>
 
     <string name="gesture_duration_title">Duración del gesto</string>
-    <string name="gesture_duration_value">2 segundos (fija)</string>
+    <string name="gesture_duration_value">2 segundos</string>
     <string name="block_volume_title">Bloquear cambios de volumen durante el gesto</string>
     <string name="block_volume_summary">Consume los eventos cuando la combinación ya fue reconocida. El primer cambio puede ocurrir antes de detectar ambos botones.</string>
     <string name="vibrate_success_title">Vibrar después de una ejecución correcta</string>
     <string name="vibrate_success_summary">Produce una vibración breve después de restablecer la densidad.</string>
 
-    <string name="accessibility_explanation">Este servicio no lee la pantalla. Solo filtra los botones de volumen para detectar Volumen arriba + Volumen abajo durante 2 segundos.</string>
-    <string name="key_filter_warning">Android puede asignar el filtrado de teclas a un solo servicio de accesibilidad. Si el gesto no responde, desactiva temporalmente otros servicios que también controlen botones físicos.</string>
+    <string name="accessibility_explanation">No lee la pantalla. Solo detecta Volumen arriba + Volumen abajo durante 2 segundos.</string>
+    <string name="key_filter_warning">Android puede asignar el filtrado de teclas a un solo servicio. Si el gesto no responde, desactiva temporalmente otros servicios que controlen botones físicos.</string>
     <string name="volume_behavior_warning">Con el bloqueo desactivado, el volumen puede cambiar ligeramente mientras realizas el gesto.</string>
 
     <string name="accessibility_service_label">Atajo de volumen de Density Reset</string>
     <string name="accessibility_service_description">Detecta únicamente la pulsación simultánea de Volumen arriba y Volumen abajo durante 2 segundos para solicitar a Shizuku el restablecimiento de la densidad. No inspecciona ventanas ni contenido de otras aplicaciones.</string>
 
-    <string name="result_waiting">El resultado de la prueba aparecerá aquí.</string>
+    <string name="result_waiting">El resultado aparecerá aquí.</string>
     <string name="density_reset_success">Densidad restablecida correctamente.</string>
     <string name="shizuku_not_installed">Shizuku no está instalado.</string>
     <string name="shizuku_not_running">Shizuku no está iniciado.</string>
@@ -66,8 +67,10 @@
     <string name="permission_denied_rationale">El permiso fue denegado. Abre Shizuku y permite Density Reset desde Aplicaciones autorizadas.</string>
     <string name="cannot_open_shizuku">No fue posible abrir Shizuku.</string>
     <string name="unexpected_error">Error inesperado: %1$s</string>
-    <string name="test_accessibility_notice">El botón de prueba puede funcionar sin accesibilidad; habilítala para usar el gesto.</string>
+    <string name="test_accessibility_notice">El botón puede funcionar sin accesibilidad; habilítala para usar el gesto.</string>
 
-    <string name="privacy_note">Sin Internet, anuncios, analíticas, almacenamiento ni lectura de pantalla.</string>
-    <string name="gesture_instruction">Mantén presionados ambos botones de volumen durante 2 segundos.</string>
+    <string name="contact_description">Soporte, sugerencias y novedades del proyecto.</string>
+    <string name="instagram_username">Zaid.nvr</string>
+    <string name="instagram_button">Instagram · @Zaid.nvr</string>
+    <string name="developed_by">Developed by: Zaid Navarro</string>
 </resources>
