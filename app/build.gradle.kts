@@ -1,3 +1,4 @@
+import java.util.Base64
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -73,7 +74,7 @@ val decodeBrandAssets by tasks.registering {
         val destination = outputFile.get().asFile
         destination.parentFile.mkdirs()
         val encoded = sourceFile.asFile.readText().trim()
-        destination.writeBytes(java.util.Base64.getDecoder().decode(encoded))
+        destination.writeBytes(Base64.getDecoder().decode(encoded))
     }
 }
 
