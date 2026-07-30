@@ -2,7 +2,6 @@ package com.zaid.densityreset.density
 
 import android.content.Context
 import android.os.Process
-import android.os.UserHandle
 import com.zaid.densityreset.shizuku.ShizukuManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -183,7 +182,7 @@ class ShizukuDensityController(context: Context) : DensityController {
     }
 
     private fun runBridge(action: String, density: Int? = null): BridgeResult {
-        val userId = UserHandle.getUserHandleForUid(Process.myUid()).getIdentifier()
+        val userId = Process.myUid() / ANDROID_UIDS_PER_USER
         val command = buildList {
             add("/system/bin/app_process")
             add("-Djava.class.path=${appContext.applicationInfo.sourceDir}")
@@ -415,6 +414,7 @@ class ShizukuDensityController(context: Context) : DensityController {
         const val RESULT_PREFIX = "ZAID_DENSITY_RESULT"
         const val COMMAND_TIMEOUT_SECONDS = 15L
         const val PROCESS_DESTROY_GRACE_SECONDS = 1L
+        const val ANDROID_UIDS_PER_USER = 100_000
         const val WM_MINIMUM_DENSITY = 72
 
         val BINDER_FALLBACK_CODES = setOf(
