@@ -1,9 +1,12 @@
 package com.zaid.densityreset
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Base64
 import android.view.View
 import android.widget.Toast
 import androidx.annotation.ColorRes
@@ -17,6 +20,7 @@ import com.zaid.densityreset.databinding.ActivityMainBinding
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AccessibilityUtils
 import com.zaid.densityreset.util.AppPreferences
+import com.zaid.densityreset.util.ImageAssets
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,7 +36,7 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
+        configureBranding()
         applySystemBarInsets()
 
         configurePreferences()
@@ -50,6 +54,20 @@ class MainActivity : AppCompatActivity() {
         ShizukuManager.removeStateListener(stateListener)
         super.onDestroy()
     }
+
+    private fun configureBranding() {
+        decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
+            binding.backgroundImage.setImageBitmap(bitmap)
+        }
+        decodeImage(ImageAssets.LOGO_BASE64)?.let { bitmap ->
+            binding.headerLogo.setImageBitmap(bitmap)
+        }
+    }
+
+    private fun decodeImage(encoded: String): Bitmap? = runCatching {
+        val bytes = Base64.decode(encoded, Base64.DEFAULT)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    }.getOrNull()
 
     private fun applySystemBarInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
