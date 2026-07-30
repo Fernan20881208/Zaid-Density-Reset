@@ -36,20 +36,24 @@ class ShizukuDensityController(context: Context) : DensityController {
         runCatching {
             ensureShizukuReady()
 
-            val binderResult = runBridge(
-                action = ACTION_APPLY,
-                density = density
-            )
+            val binderAttempt = runCatching {
+                runBridge(
+                    action = ACTION_APPLY,
+                    density = density
+                )
+            }
+            val binderResult = binderAttempt.getOrNull()
 
-            if (!binderResult.success) {
-                if (
-                    density >= WM_MINIMUM_DENSITY &&
-                    binderResult.code != null &&
-                    binderResult.code in BINDER_FALLBACK_CODES
-                ) {
+            if (binderResult?.success != true) {
+                val canFallback = density >= WM_MINIMUM_DENSITY && (
+                    binderResult == null ||
+                        binderResult.code in BINDER_FALLBACK_CODES
+                    )
+                if (canFallback) {
                     applyWithWmFallback(density)
                 } else {
-                    throw bridgeError(binderResult)
+                    throw binderAttempt.exceptionOrNull()
+                        ?: bridgeError(binderResult ?: invalidBridgeResult())
                 }
             }
 
@@ -67,8 +71,10 @@ class ShizukuDensityController(context: Context) : DensityController {
         runCatching {
             ensureShizukuReady()
 
-            val binderResult = runBridge(action = ACTION_RESET)
-            if (!binderResult.success) {
+            val binderResult = runCatching {
+                runBridge(action = ACTION_RESET)
+            }.getOrNull()
+            if (binderResult?.success != true) {
                 resetWithWmFallback()
             }
 
@@ -90,8 +96,10 @@ class ShizukuDensityController(context: Context) : DensityController {
     }
 
     private fun readSystemStatePreferBinder(): DensitySystemState {
-        val binderResult = runBridge(action = ACTION_STATUS)
-        if (binderResult.success) {
+        val binderResult = runCatching {
+            runBridge(action = ACTION_STATUS)
+        }.getOrNull()
+        if (binderResult?.success == true) {
             val initial = binderResult.initial
                 ?: throw invalidBridgeResponse()
             val current = binderResult.current
@@ -175,7 +183,7 @@ class ShizukuDensityController(context: Context) : DensityController {
     }
 
     private fun runBridge(action: String, density: Int? = null): BridgeResult {
-        val userId = UserHandle.getUserHandleForUid(Process.myUid()).identifier
+        val userId = UserHandle.getUserHandleForUid(Process.myUid()).getIdentifier()
         val command = buildList {
             add("/system/bin/app_process")
             add("-Djava.class.path=${appContext.applicationInfo.sourceDir}")
@@ -342,6 +350,11 @@ class ShizukuDensityController(context: Context) : DensityController {
     private fun invalidBridgeResponse() = DensityControlException(
         DensityFailureReason.WINDOW_MANAGER_UNAVAILABLE,
         "No fue posible acceder a WindowManager."
+    )
+
+    private fun invalidBridgeResult() = BridgeResult(
+        success = false,
+        code = "WINDOW_MANAGER_UNAVAILABLE"
     )
 
     private fun terminateProcess(process: ShizukuRemoteProcess) {
