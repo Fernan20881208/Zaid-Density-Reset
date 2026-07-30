@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.RemoteException
+import com.zaid.densityreset.BuildConfig
 import com.zaid.densityreset.IPrivilegedDensityService
 import com.zaid.densityreset.R
 import org.json.JSONObject
@@ -24,7 +26,13 @@ object ShizukuManager {
         val installed: Boolean,
         val running: Boolean,
         val permissionGranted: Boolean,
-        val userServiceConnected: Boolean
+        val userServiceConnected: Boolean,
+        val bindingInProgress: Boolean,
+        val shizukuAppVersion: String?,
+        val shizukuApiVersion: Int?,
+        val shizukuUid: Int?,
+        val peekedServiceVersion: Int?,
+        val connectionDetail: String
     )
 
     data class ResetResult(
@@ -37,12 +45,11 @@ object ShizukuManager {
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val PERMISSION_REQUEST_CODE = 7104
-    private const val USER_SERVICE_TAG = "density-reset-user-service-v2"
-    private const val USER_SERVICE_VERSION = 2
+    private const val USER_SERVICE_TAG = "density-reset-user-service-v3"
+    private const val USER_SERVICE_VERSION = 3
     private const val SERVICE_CONNECT_TIMEOUT_MILLIS = 20_000L
     private const val SERVICE_CONNECT_POLL_MILLIS = 100L
-    private const val BIND_ATTEMPT_TIMEOUT_MILLIS = 10_000L
-    private const val RECONNECT_DELAY_MILLIS = 1_500L
+    private const val BIND_CALLBACK_TIMEOUT_MILLIS = 15_000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateListeners = CopyOnWriteArraySet<(State) -> Unit>()
@@ -66,14 +73,16 @@ object ShizukuManager {
     private var connectedBinder: IBinder? = null
 
     @Volatile
-    private var lastConnectionError: String = ""
+    private var lastConnectionDetail: String = "Esperando al Binder de Shizuku."
+
+    @Volatile
+    private var lastPeekedServiceVersion: Int? = null
 
     private lateinit var userServiceArgs: Shizuku.UserServiceArgs
 
     private val serviceDeathRecipient: IBinder.DeathRecipient = IBinder.DeathRecipient {
         mainHandler.post {
             markDisconnected("El proceso privilegiado terminó inesperadamente.")
-            scheduleReconnect()
         }
     }
 
@@ -83,15 +92,16 @@ object ShizukuManager {
             bindingInProgress.set(false)
 
             if (!binder.pingBinder()) {
-                markDisconnected("Shizuku devolvió un Binder no válido.")
-                scheduleReconnect()
+                markDisconnected("Shizuku devolvió un Binder de UserService no válido.")
                 return
             }
 
             clearConnectedService()
             connectedBinder = binder
             privilegedService = IPrivilegedDensityService.Stub.asInterface(binder)
-            lastConnectionError = ""
+            lastPeekedServiceVersion = USER_SERVICE_VERSION
+            lastConnectionDetail =
+                "onServiceConnected recibido: ${name.className.substringAfterLast('.')}"
             runCatching { binder.linkToDeath(serviceDeathRecipient, 0) }
             publishState()
         }
@@ -99,39 +109,44 @@ object ShizukuManager {
         override fun onServiceDisconnected(name: ComponentName) {
             mainHandler.removeCallbacks(bindTimeoutRunnable)
             bindingInProgress.set(false)
-            markDisconnected("El UserService se desconectó.")
-            scheduleReconnect()
+            markDisconnected(
+                "onServiceDisconnected recibido para ${name.className.substringAfterLast('.')}"
+            )
         }
 
         override fun onBindingDied(name: ComponentName) {
             mainHandler.removeCallbacks(bindTimeoutRunnable)
             bindingInProgress.set(false)
-            markDisconnected("Android invalidó la conexión del UserService.")
-            scheduleReconnect()
+            markDisconnected(
+                "Android invalidó el enlace de ${name.className.substringAfterLast('.')}"
+            )
         }
     }
 
     private val binderReceivedListener: Shizuku.OnBinderReceivedListener =
         Shizuku.OnBinderReceivedListener {
-            bindingInProgress.set(false)
-            lastConnectionError = ""
+            lastConnectionDetail = "Binder principal de Shizuku recibido."
             publishState()
-            mainHandler.postDelayed({ bindUserServiceIfPossible() }, 250L)
+            mainHandler.postDelayed({ connectUserServiceIfPossible() }, 250L)
         }
 
     private val binderDeadListener: Shizuku.OnBinderDeadListener =
         Shizuku.OnBinderDeadListener {
             mainHandler.removeCallbacks(bindTimeoutRunnable)
             bindingInProgress.set(false)
-            markDisconnected("Shizuku se detuvo o reinició.")
+            markDisconnected("El Binder principal de Shizuku murió o fue reiniciado.")
         }
 
     private val permissionResultListener: Shizuku.OnRequestPermissionResultListener =
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == PERMISSION_REQUEST_CODE) {
-                publishState()
                 if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                    mainHandler.postDelayed({ bindUserServiceIfPossible(force = true) }, 250L)
+                    lastConnectionDetail = "Permiso concedido; preparando UserService."
+                    publishState()
+                    mainHandler.postDelayed({ connectUserServiceIfPossible() }, 250L)
+                } else {
+                    lastConnectionDetail = "Shizuku rechazó el permiso solicitado."
+                    publishState()
                 }
             }
         }
@@ -140,21 +155,14 @@ object ShizukuManager {
         if (!bindingInProgress.compareAndSet(true, false)) return@Runnable
         if (isConnected()) return@Runnable
 
-        lastConnectionError =
-            "Shizuku no respondió al enlace del UserService en ${BIND_ATTEMPT_TIMEOUT_MILLIS / 1_000} segundos."
-        runCatching {
-            Shizuku.unbindUserService(userServiceArgs, serviceConnection, false)
+        val peekResult = peekUserServiceSafely()
+        lastPeekedServiceVersion = peekResult
+        lastConnectionDetail = if (peekResult != null && peekResult >= 0) {
+            "El UserService existe (versión $peekResult), pero Shizuku no entregó onServiceConnected en ${BIND_CALLBACK_TIMEOUT_MILLIS / 1_000} s."
+        } else {
+            "Shizuku no creó ni conectó el UserService en ${BIND_CALLBACK_TIMEOUT_MILLIS / 1_000} s."
         }
-        clearConnectedService()
         publishState()
-        scheduleReconnect()
-    }
-
-    private val reconnectRunnable: Runnable = Runnable {
-        val state = currentState()
-        if (state.running && state.permissionGranted && !state.userServiceConnected) {
-            bindUserServiceIfPossible(force = true)
-        }
     }
 
     fun initialize(context: Context) {
@@ -165,13 +173,13 @@ object ShizukuManager {
             applicationContext = context.applicationContext
             userServiceArgs = Shizuku.UserServiceArgs(
                 ComponentName(
-                    context.packageName,
+                    BuildConfig.APPLICATION_ID,
                     PrivilegedDensityService::class.java.name
                 )
             )
                 .daemon(false)
-                .processNameSuffix("density_reset")
-                .debuggable(false)
+                .processNameSuffix("density_reset_service")
+                .debuggable(BuildConfig.DEBUG)
                 .version(USER_SERVICE_VERSION)
                 .tag(USER_SERVICE_TAG)
 
@@ -182,7 +190,7 @@ object ShizukuManager {
         }
 
         publishState()
-        mainHandler.postDelayed({ bindUserServiceIfPossible() }, 250L)
+        mainHandler.postDelayed({ connectUserServiceIfPossible() }, 250L)
     }
 
     fun addStateListener(listener: (State) -> Unit) {
@@ -196,7 +204,7 @@ object ShizukuManager {
 
     fun refresh() {
         publishState()
-        bindUserServiceIfPossible()
+        connectUserServiceIfPossible()
     }
 
     fun currentState(): State {
@@ -209,7 +217,13 @@ object ShizukuManager {
             installed = installed,
             running = running,
             permissionGranted = permissionGranted,
-            userServiceConnected = permissionGranted && isConnected()
+            userServiceConnected = permissionGranted && isConnected(),
+            bindingInProgress = bindingInProgress.get(),
+            shizukuAppVersion = context?.let(::getShizukuAppVersion),
+            shizukuApiVersion = if (running) getShizukuApiVersionSafely() else null,
+            shizukuUid = if (running) getShizukuUidSafely() else null,
+            peekedServiceVersion = lastPeekedServiceVersion,
+            connectionDetail = lastConnectionDetail
         )
     }
 
@@ -220,7 +234,7 @@ object ShizukuManager {
         if (!state.installed) return context.getString(R.string.shizuku_not_installed)
         if (!state.running) return context.getString(R.string.shizuku_not_running)
         if (state.permissionGranted) {
-            bindUserServiceIfPossible(force = true)
+            connectUserServiceIfPossible()
             return context.getString(R.string.permission_already_granted)
         }
 
@@ -237,6 +251,33 @@ object ShizukuManager {
                 throwable.message ?: throwable.javaClass.simpleName
             )
         }
+    }
+
+    fun reconnectUserService(): String {
+        val context = applicationContext ?: return "Density Reset no está inicializado."
+        val state = currentState()
+        if (!state.running) return context.getString(R.string.shizuku_not_running)
+        if (!state.permissionGranted) return context.getString(R.string.shizuku_permission_missing)
+
+        mainHandler.post {
+            mainHandler.removeCallbacks(bindTimeoutRunnable)
+            bindingInProgress.set(false)
+            lastPeekedServiceVersion = null
+            lastConnectionDetail = "Eliminando el enlace anterior antes de reconectar."
+            publishState()
+
+            runCatching {
+                Shizuku.unbindUserService(userServiceArgs, serviceConnection, true)
+            }.onFailure { throwable ->
+                lastConnectionDetail = formatThrowable("Error al limpiar el enlace", throwable)
+                publishState()
+            }
+
+            clearConnectedService()
+            mainHandler.postDelayed({ connectUserServiceIfPossible(skipPeek = true) }, 750L)
+        }
+
+        return context.getString(R.string.user_service_reconnect_started)
     }
 
     fun openShizuku(): Boolean {
@@ -303,12 +344,12 @@ object ShizukuManager {
             return ResetResult(
                 false,
                 context.getString(R.string.user_service_not_connected),
-                stderr = "La versión instalada de Shizuku no admite UserService. Actualiza Shizuku."
+                stderr = "La versión instalada de Shizuku no admite UserService."
             )
         }
 
         if (!state.userServiceConnected) {
-            mainHandler.post { bindUserServiceIfPossible(force = true) }
+            mainHandler.post { connectUserServiceIfPossible() }
             val deadline = System.nanoTime() +
                 TimeUnit.MILLISECONDS.toNanos(SERVICE_CONNECT_TIMEOUT_MILLIS)
 
@@ -323,13 +364,11 @@ object ShizukuManager {
         val service = privilegedService
         val binder = connectedBinder
         if (service == null || binder?.pingBinder() != true) {
-            val detail = lastConnectionError.ifBlank {
-                "Shizuku no entregó la conexión del UserService. Abre Shizuku, confirma que siga iniciado y vuelve a intentar."
-            }
+            val stateAfterWait = currentState()
             return ResetResult(
                 false,
                 context.getString(R.string.user_service_not_connected),
-                stderr = detail
+                stderr = buildDiagnosticText(stateAfterWait)
             )
         }
 
@@ -338,7 +377,6 @@ object ShizukuManager {
         } catch (exception: RemoteException) {
             mainHandler.post {
                 markDisconnected(exception.message ?: "La llamada Binder fue interrumpida.")
-                scheduleReconnect()
             }
             ResetResult(
                 success = false,
@@ -354,6 +392,23 @@ object ShizukuManager {
                 )
             )
         }
+    }
+
+    fun buildDiagnosticText(state: State = currentState()): String = buildString {
+        append("Detalle: ")
+        append(state.connectionDetail)
+        append('\n')
+        append("Shizuku app: ")
+        append(state.shizukuAppVersion ?: "desconocida")
+        append(" | API: ")
+        append(state.shizukuApiVersion ?: "?")
+        append(" | UID: ")
+        append(state.shizukuUid ?: "?")
+        append('\n')
+        append("Enlazando: ")
+        append(if (state.bindingInProgress) "sí" else "no")
+        append(" | peek: ")
+        append(state.peekedServiceVersion?.toString() ?: "sin resultado")
     }
 
     private fun parseRemoteResult(context: Context, rawResult: String?): ResetResult {
@@ -383,56 +438,64 @@ object ShizukuManager {
         )
     }
 
-    private fun bindUserServiceIfPossible(force: Boolean = false) {
+    private fun connectUserServiceIfPossible(skipPeek: Boolean = false) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            mainHandler.post { bindUserServiceIfPossible(force) }
+            mainHandler.post { connectUserServiceIfPossible(skipPeek) }
             return
         }
-        if (!initialized) return
+        if (!initialized || isConnected()) return
 
         val state = currentState()
-        if (!state.running || !state.permissionGranted || state.userServiceConnected) return
-
-        if (force) {
-            mainHandler.removeCallbacks(bindTimeoutRunnable)
-            bindingInProgress.set(false)
-            runCatching {
-                Shizuku.unbindUserService(userServiceArgs, serviceConnection, false)
-            }
-        }
-
+        if (!state.running || !state.permissionGranted) return
         if (!bindingInProgress.compareAndSet(false, true)) return
 
-        lastConnectionError = ""
+        lastConnectionDetail = "Preparando solicitud de UserService."
+        publishState()
+
         try {
             if (Shizuku.isPreV11()) {
-                throw IllegalStateException("Shizuku anterior a la API 11 no admite UserService.")
+                throw IllegalStateException("Shizuku anterior a API 11 no admite UserService.")
             }
-            Shizuku.bindUserService(userServiceArgs, serviceConnection)
-            mainHandler.removeCallbacks(bindTimeoutRunnable)
-            mainHandler.postDelayed(bindTimeoutRunnable, BIND_ATTEMPT_TIMEOUT_MILLIS)
-        } catch (throwable: Throwable) {
-            bindingInProgress.set(false)
-            lastConnectionError = buildString {
-                append(throwable.javaClass.simpleName)
-                throwable.message?.takeIf { it.isNotBlank() }?.let {
-                    append(": ")
-                    append(it)
+
+            if (!skipPeek && getShizukuApiVersionSafely()?.let { it >= 12 } == true) {
+                val peekVersion = Shizuku.peekUserService(userServiceArgs, serviceConnection)
+                lastPeekedServiceVersion = peekVersion
+                if (peekVersion >= 0) {
+                    lastConnectionDetail =
+                        "UserService existente detectado (versión $peekVersion); esperando Binder."
+                    scheduleBindTimeout()
+                    publishState()
+                    return
                 }
             }
+
+            Shizuku.bindUserService(userServiceArgs, serviceConnection)
+            lastConnectionDetail = "Solicitud bindUserService enviada; esperando callback."
+            scheduleBindTimeout()
+            publishState()
+        } catch (throwable: Throwable) {
+            bindingInProgress.set(false)
+            lastConnectionDetail = formatThrowable("bindUserService falló", throwable)
             clearConnectedService()
             publishState()
         }
     }
 
-    private fun scheduleReconnect() {
-        mainHandler.removeCallbacks(reconnectRunnable)
-        mainHandler.postDelayed(reconnectRunnable, RECONNECT_DELAY_MILLIS)
+    private fun scheduleBindTimeout() {
+        mainHandler.removeCallbacks(bindTimeoutRunnable)
+        mainHandler.postDelayed(bindTimeoutRunnable, BIND_CALLBACK_TIMEOUT_MILLIS)
+    }
+
+    private fun peekUserServiceSafely(): Int? {
+        if (getShizukuApiVersionSafely()?.let { it >= 12 } != true) return null
+        return runCatching {
+            Shizuku.peekUserService(userServiceArgs, serviceConnection)
+        }.getOrNull()
     }
 
     private fun markDisconnected(reason: String) {
         bindingInProgress.set(false)
-        lastConnectionError = reason
+        lastConnectionDetail = reason
         clearConnectedService()
         publishState()
     }
@@ -466,6 +529,16 @@ object ShizukuManager {
         mainHandler.post { callback(result) }
     }
 
+    private fun formatThrowable(prefix: String, throwable: Throwable): String = buildString {
+        append(prefix)
+        append(": ")
+        append(throwable.javaClass.simpleName)
+        throwable.message?.takeIf { it.isNotBlank() }?.let {
+            append(" — ")
+            append(it)
+        }
+    }
+
     private fun isShizukuInstalled(context: Context): Boolean =
         try {
             context.packageManager.getApplicationInfo(SHIZUKU_PACKAGE, 0)
@@ -473,6 +546,20 @@ object ShizukuManager {
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
+
+    private fun getShizukuAppVersion(context: Context): String? =
+        runCatching {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    SHIZUKU_PACKAGE,
+                    PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0)
+            }
+            packageInfo.versionName
+        }.getOrNull()
 
     private fun isShizukuBinderAvailable(): Boolean =
         try {
@@ -487,4 +574,10 @@ object ShizukuManager {
         } catch (_: Throwable) {
             false
         }
+
+    private fun getShizukuApiVersionSafely(): Int? =
+        runCatching { Shizuku.getVersion() }.getOrNull()
+
+    private fun getShizukuUidSafely(): Int? =
+        runCatching { Shizuku.getUid() }.getOrNull()
 }
