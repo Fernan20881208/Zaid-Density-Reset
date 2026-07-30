@@ -1,6 +1,5 @@
 package com.zaid.densityreset.shizuku
 
-import android.content.Context
 import android.util.Log
 import androidx.annotation.Keep
 import com.zaid.densityreset.IPrivilegedDensityService
@@ -15,11 +14,10 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
 @Keep
-class PrivilegedDensityService() : IPrivilegedDensityService.Stub() {
+class PrivilegedDensityService : IPrivilegedDensityService.Stub() {
 
-    @Keep
-    constructor(context: Context) : this() {
-        Log.i(TAG, "UserService creado para ${context.packageName}")
+    init {
+        Log.i(TAG, "UserService creado")
     }
 
     private val commandExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
@@ -147,11 +145,7 @@ class PrivilegedDensityService() : IPrivilegedDensityService.Stub() {
                 process.waitFor(PROCESS_DESTROY_GRACE_SECONDS, TimeUnit.SECONDS)
             }
         } catch (_: Throwable) {
-            try {
-                process.destroyForcibly()
-            } catch (_: Throwable) {
-                // No hay otra operación segura que realizar sobre este proceso fijo.
-            }
+            runCatching { process.destroyForcibly() }
         } finally {
             closeProcessStreams(process)
         }
