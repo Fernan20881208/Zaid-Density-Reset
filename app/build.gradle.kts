@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Base64
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -73,8 +74,21 @@ val decodeBrandAssets by tasks.registering {
     doLast {
         val destination = outputFile.get().asFile
         destination.parentFile.mkdirs()
-        val encoded = sourceFile.asFile.readText().trim()
-        destination.writeBytes(Base64.getDecoder().decode(encoded))
+
+        // Normaliza una transcripción dañada del recurso y comprueba que el
+        // binario generado sea exactamente el retrato proporcionado por Zaid.
+        val encoded = sourceFile.asFile.readText().trim().replace(
+            "SZgBGKeEN15y6229HByBFb",
+            "SZgBGKeEN15i6229HByBFb"
+        )
+        val decoded = Base64.getDecoder().decode(encoded)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(decoded)
+            .joinToString("") { byte -> "%02x".format(byte) }
+        check(digest == "1d1c3dcc2dfe09bc595f9acbe35689b69a1bcbe93e02fb6e5ec63f77d4c0bd23") {
+            "El recurso del logo no coincide con la imagen original."
+        }
+        destination.writeBytes(decoded)
     }
 }
 
