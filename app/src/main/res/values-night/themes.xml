@@ -9,10 +9,10 @@
         <item name="fontFamily">sans</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">@drawable/bg_liquid_background</item>
+        <item name="android:windowBackground">@drawable/app_background</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/glass_bg_end</item>
+        <item name="android:navigationBarColor">#E609111E</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowDisablePreview">false</item>
