@@ -4,21 +4,20 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:clipChildren="false"
-    android:clipToPadding="false">
+    android:background="@drawable/bg_liquid_background">
 
     <ImageView
+        android:id="@+id/backgroundImage"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
         android:importantForAccessibility="no"
-        android:scaleType="centerCrop"
-        android:src="@drawable/app_background" />
+        android:scaleType="centerCrop" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#36040B16"
+        android:background="#42040B16"
         android:importantForAccessibility="no" />
 
     <LinearLayout
@@ -34,17 +33,49 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_glass_header"
-            android:contentInsetStart="14dp"
-            android:contentInsetEnd="16dp"
-            android:elevation="0dp"
-            android:minHeight="96dp"
-            app:logo="@drawable/zaid_logo"
-            app:logoDescription="@string/app_name"
-            app:maxButtonHeight="66dp"
-            app:subtitle="@string/app_subtitle"
-            app:subtitleTextColor="@color/glass_text_secondary"
-            app:title="@string/app_name"
-            app:titleTextColor="@color/glass_text_primary" />
+            android:contentInsetStart="0dp"
+            android:contentInsetEnd="0dp"
+            android:elevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:id="@+id/headerLogo"
+                    android:layout_width="68dp"
+                    android:layout_height="68dp"
+                    android:contentDescription="@string/app_name"
+                    android:scaleType="fitCenter" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/app_name"
+                        android:textColor="@color/glass_text_primary"
+                        android:textSize="22sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/app_subtitle"
+                        android:textColor="@color/glass_text_secondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.appcompat.widget.Toolbar>
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
@@ -53,7 +84,7 @@
             android:clipToPadding="false"
             android:fillViewport="true"
             android:overScrollMode="never"
-            android:paddingBottom="40dp">
+            android:paddingBottom="36dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -130,23 +161,17 @@
                         android:layout_height="54dp"
                         android:layout_marginTop="16dp"
                         android:background="@drawable/bg_glass_button_secondary"
-                        android:elevation="0dp"
                         android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="0dp"
-                        android:paddingHorizontal="14dp"
                         android:stateListAnimator="@null"
                         android:text="@string/reconnect_user_service"
                         android:textAllCaps="false"
                         android:textColor="@color/glass_text_primary"
-                        android:textSize="14sp"
                         app:backgroundTint="@null" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:baselineAligned="false"
                         android:orientation="horizontal">
 
                         <androidx.appcompat.widget.AppCompatButton
@@ -155,16 +180,11 @@
                             android:layout_height="54dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_glass_button_primary"
-                            android:elevation="0dp"
                             android:fontFamily="sans-serif-medium"
-                            android:gravity="center"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="8dp"
                             android:stateListAnimator="@null"
                             android:text="@string/request_permission"
                             android:textAllCaps="false"
                             android:textColor="@color/glass_button_text"
-                            android:textSize="13sp"
                             app:backgroundTint="@null" />
 
                         <androidx.appcompat.widget.AppCompatButton
@@ -174,16 +194,11 @@
                             android:layout_marginStart="10dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_glass_button_secondary"
-                            android:elevation="0dp"
                             android:fontFamily="sans-serif-medium"
-                            android:gravity="center"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="8dp"
                             android:stateListAnimator="@null"
                             android:text="@string/open_shizuku"
                             android:textAllCaps="false"
                             android:textColor="@color/glass_text_primary"
-                            android:textSize="13sp"
                             app:backgroundTint="@null" />
                     </LinearLayout>
                 </LinearLayout>
@@ -217,7 +232,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:lineSpacingExtra="2dp"
                         android:text="@string/accessibility_explanation"
                         android:textColor="@color/glass_text_secondary"
                         android:textSize="14sp" />
@@ -226,7 +240,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:lineSpacingExtra="2dp"
                         android:text="@string/key_filter_warning"
                         android:textColor="@color/status_warning"
                         android:textSize="12sp" />
@@ -245,15 +258,11 @@
                         android:layout_height="56dp"
                         android:layout_marginTop="18dp"
                         android:background="@drawable/bg_glass_button_primary"
-                        android:elevation="0dp"
                         android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="0dp"
                         android:stateListAnimator="@null"
                         android:text="@string/open_accessibility_settings"
                         android:textAllCaps="false"
                         android:textColor="@color/glass_button_text"
-                        android:textSize="14sp"
                         app:backgroundTint="@null" />
                 </LinearLayout>
 
@@ -285,7 +294,6 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
                         android:text="@string/gesture_duration_value"
                         android:textColor="@color/glass_text_secondary"
                         android:textSize="14sp" />
@@ -295,10 +303,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="18dp"
-                        android:fontFamily="sans-serif-medium"
                         android:text="@string/block_volume_title"
-                        android:textColor="@color/glass_text_primary"
-                        android:textSize="15sp" />
+                        android:textColor="@color/glass_text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -313,10 +319,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="18dp"
-                        android:fontFamily="sans-serif-medium"
                         android:text="@string/vibrate_success_title"
-                        android:textColor="@color/glass_text_primary"
-                        android:textSize="15sp" />
+                        android:textColor="@color/glass_text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -349,15 +353,11 @@
                         android:layout_height="58dp"
                         android:layout_marginTop="16dp"
                         android:background="@drawable/bg_glass_button_primary"
-                        android:elevation="0dp"
                         android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="0dp"
                         android:stateListAnimator="@null"
                         android:text="@string/test_density_reset"
                         android:textAllCaps="false"
                         android:textColor="@color/glass_button_text"
-                        android:textSize="15sp"
                         app:backgroundTint="@null" />
 
                     <ProgressBar
@@ -375,7 +375,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:lineSpacingExtra="2dp"
                         android:text="@string/result_waiting"
                         android:textColor="@color/glass_text_secondary"
                         android:textIsSelectable="true"
@@ -395,7 +394,6 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
                         android:gravity="center"
                         android:text="@string/section_contact"
                         android:textColor="@color/glass_text_primary"
@@ -416,15 +414,11 @@
                         android:layout_height="54dp"
                         android:layout_marginTop="16dp"
                         android:background="@drawable/bg_glass_button_secondary"
-                        android:elevation="0dp"
                         android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="0dp"
                         android:stateListAnimator="@null"
                         android:text="@string/instagram_button"
                         android:textAllCaps="false"
                         android:textColor="@color/glass_text_primary"
-                        android:textSize="14sp"
                         app:backgroundTint="@null" />
 
                     <TextView
