@@ -21,14 +21,12 @@ jobs:
       - name: Obtener código
         uses: actions/checkout@v6
 
-      - name: Configurar Java 17
+      - name: Configurar Java 17 y caché de Gradle
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Configurar caché de Gradle
-        uses: gradle/actions/setup-gradle@v6
+          cache: gradle
 
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
