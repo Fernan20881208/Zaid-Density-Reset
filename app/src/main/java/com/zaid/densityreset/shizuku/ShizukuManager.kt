@@ -70,14 +70,14 @@ object ShizukuManager {
 
     private lateinit var userServiceArgs: Shizuku.UserServiceArgs
 
-    private val serviceDeathRecipient = IBinder.DeathRecipient {
+    private val serviceDeathRecipient: IBinder.DeathRecipient = IBinder.DeathRecipient {
         mainHandler.post {
             markDisconnected("El proceso privilegiado terminó inesperadamente.")
             scheduleReconnect()
         }
     }
 
-    private val serviceConnection = object : ServiceConnection {
+    private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             mainHandler.removeCallbacks(bindTimeoutRunnable)
             bindingInProgress.set(false)
@@ -111,20 +111,22 @@ object ShizukuManager {
         }
     }
 
-    private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
-        bindingInProgress.set(false)
-        lastConnectionError = ""
-        publishState()
-        mainHandler.postDelayed({ bindUserServiceIfPossible() }, 250L)
-    }
+    private val binderReceivedListener: Shizuku.OnBinderReceivedListener =
+        Shizuku.OnBinderReceivedListener {
+            bindingInProgress.set(false)
+            lastConnectionError = ""
+            publishState()
+            mainHandler.postDelayed({ bindUserServiceIfPossible() }, 250L)
+        }
 
-    private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        mainHandler.removeCallbacks(bindTimeoutRunnable)
-        bindingInProgress.set(false)
-        markDisconnected("Shizuku se detuvo o reinició.")
-    }
+    private val binderDeadListener: Shizuku.OnBinderDeadListener =
+        Shizuku.OnBinderDeadListener {
+            mainHandler.removeCallbacks(bindTimeoutRunnable)
+            bindingInProgress.set(false)
+            markDisconnected("Shizuku se detuvo o reinició.")
+        }
 
-    private val permissionResultListener =
+    private val permissionResultListener: Shizuku.OnRequestPermissionResultListener =
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == PERMISSION_REQUEST_CODE) {
                 publishState()
@@ -134,7 +136,7 @@ object ShizukuManager {
             }
         }
 
-    private val bindTimeoutRunnable = Runnable {
+    private val bindTimeoutRunnable: Runnable = Runnable {
         if (!bindingInProgress.compareAndSet(true, false)) return@Runnable
         if (isConnected()) return@Runnable
 
@@ -146,6 +148,13 @@ object ShizukuManager {
         clearConnectedService()
         publishState()
         scheduleReconnect()
+    }
+
+    private val reconnectRunnable: Runnable = Runnable {
+        val state = currentState()
+        if (state.running && state.permissionGranted && !state.userServiceConnected) {
+            bindUserServiceIfPossible(force = true)
+        }
     }
 
     fun initialize(context: Context) {
@@ -419,13 +428,6 @@ object ShizukuManager {
     private fun scheduleReconnect() {
         mainHandler.removeCallbacks(reconnectRunnable)
         mainHandler.postDelayed(reconnectRunnable, RECONNECT_DELAY_MILLIS)
-    }
-
-    private val reconnectRunnable = Runnable {
-        val state = currentState()
-        if (state.running && state.permissionGranted && !state.userServiceConnected) {
-            bindUserServiceIfPossible(force = true)
-        }
     }
 
     private fun markDisconnected(reason: String) {
