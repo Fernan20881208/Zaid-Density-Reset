@@ -15,8 +15,8 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.2.0"
+        versionCode = 8
+        versionName = "1.2.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -75,18 +75,12 @@ val decodeBrandAssets by tasks.registering {
         val destination = outputFile.get().asFile
         destination.parentFile.mkdirs()
 
-        // Normaliza una transcripción dañada del recurso y comprueba que el
-        // binario generado sea exactamente el retrato proporcionado por Zaid.
-        val encoded = sourceFile.asFile.readText().trim().replace(
-            "SZgBGKeEN15y6229HByBFb",
-            "SZgBGKeEN15i6229HByBFb"
-        )
-        val decoded = Base64.getDecoder().decode(encoded)
+        val decoded = Base64.getDecoder().decode(sourceFile.asFile.readText().trim())
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(decoded)
             .joinToString("") { byte -> "%02x".format(byte) }
-        check(digest == "1d1c3dcc2dfe09bc595f9acbe35689b69a1bcbe93e02fb6e5ec63f77d4c0bd23") {
-            "El recurso del logo no coincide con la imagen original."
+        check(digest == "8cbc6a8fb470c03c29482b395af8d5ce95f8a5d8bb71e5172d5e8ebf173a1b89") {
+            "El recurso del logo no coincide con file (1).svg."
         }
         destination.writeBytes(decoded)
     }
