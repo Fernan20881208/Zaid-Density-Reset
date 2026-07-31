@@ -1,25 +1,28 @@
 package com.zaid.densityreset.density
 
 enum class DensityPreset(
-    val title: String,
+    val displayName: String,
     val density: Int,
     val description: String
 ) {
     ULTRA(
-        title = "Sensi Ultra",
+        displayName = "Sensi Ultra",
         density = 20,
-        description = "Sensibilidad extrema"
+        description = "Escala extrema"
     ),
     HIGH(
-        title = "Sensi Alta",
+        displayName = "Sensi Alta",
         density = 72,
-        description = "Sensibilidad alta"
+        description = "Escala competitiva"
     ),
     LOW(
-        title = "Sensi Baja",
+        displayName = "Sensi Baja",
         density = 280,
-        description = "Sensibilidad estable"
+        description = "Escala equilibrada"
     );
+
+    val title: String
+        get() = displayName
 
     companion object {
         fun fromDensity(density: Int): DensityPreset? =
