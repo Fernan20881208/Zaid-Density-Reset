@@ -3,8 +3,11 @@ package com.zaid.densityreset.density
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -18,7 +21,7 @@ data class DensityUiState(
     val hasOverride: Boolean = false,
     val activePreset: DensityPreset? = null,
     val statusLabel: String = "Comprobando DPI…",
-    val operationMessage: String = "Selecciona un perfil para aplicarlo.",
+    val operationMessage: String = "",
     val lastChangedAt: Long? = null
 )
 
@@ -30,6 +33,9 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiState = MutableStateFlow(DensityUiState())
     val uiState: StateFlow<DensityUiState> = _uiState.asStateFlow()
+
+    private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val events: SharedFlow<String> = _events.asSharedFlow()
 
     init {
         refresh()
@@ -48,7 +54,7 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
                         _uiState.value = systemState.toUiState(
                             isRefreshing = false,
                             isApplying = false,
-                            operationMessage = _uiState.value.operationMessage,
+                            operationMessage = "",
                             lastChangedAt = persisted.lastChangedAt
                         )
                     }
@@ -67,14 +73,11 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
             operationMutex.withLock {
                 _uiState.value = _uiState.value.copy(
                     isApplying = true,
-                    operationMessage = "Aplicando configuración…"
+                    operationMessage = ""
                 )
 
                 val before = controller.getSystemState().getOrElse { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isApplying = false,
-                        operationMessage = userMessage(error)
-                    )
+                    showPersistentError(error)
                     return@withLock
                 }
 
@@ -83,10 +86,7 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
                 controller.applyDensity(preset.density)
                     .onSuccess {
                         val verified = controller.getSystemState().getOrElse { error ->
-                            _uiState.value = _uiState.value.copy(
-                                isApplying = false,
-                                operationMessage = userMessage(error)
-                            )
+                            showPersistentError(error)
                             return@withLock
                         }
 
@@ -105,9 +105,10 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
                         _uiState.value = verified.toUiState(
                             isRefreshing = false,
                             isApplying = false,
-                            operationMessage = "DPI aplicado correctamente",
+                            operationMessage = "",
                             lastChangedAt = changedAt
                         )
+                        _events.emit("DPI aplicado correctamente")
                     }
                     .onFailure { error ->
                         val observed = controller.getSystemState().getOrNull()
@@ -146,17 +147,15 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
                             operationMessage = if (verified.hasOverride) {
                                 "No se pudo verificar el DPI aplicado."
                             } else {
-                                "DPI restablecido correctamente."
+                                ""
                             },
                             lastChangedAt = changedAt
                         )
+                        if (!verified.hasOverride) {
+                            _events.emit("DPI restablecido correctamente.")
+                        }
                     }
-                    .onFailure { error ->
-                        _uiState.value = _uiState.value.copy(
-                            isApplying = false,
-                            operationMessage = userMessage(error)
-                        )
-                    }
+                    .onFailure { error -> showPersistentError(error) }
             }
         }
     }
@@ -166,16 +165,13 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
             operationMutex.withLock {
                 _uiState.value = _uiState.value.copy(
                     isApplying = true,
-                    operationMessage = "Aplicando configuración…"
+                    operationMessage = ""
                 )
 
                 controller.resetDensity()
                     .onSuccess {
                         val verified = controller.getSystemState().getOrElse { error ->
-                            _uiState.value = _uiState.value.copy(
-                                isApplying = false,
-                                operationMessage = userMessage(error)
-                            )
+                            showPersistentError(error)
                             return@withLock
                         }
 
@@ -194,18 +190,22 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
                         _uiState.value = verified.toUiState(
                             isRefreshing = false,
                             isApplying = false,
-                            operationMessage = "DPI restablecido correctamente.",
+                            operationMessage = "",
                             lastChangedAt = changedAt
                         )
+                        _events.emit("DPI restablecido correctamente.")
                     }
-                    .onFailure { error ->
-                        _uiState.value = _uiState.value.copy(
-                            isApplying = false,
-                            operationMessage = userMessage(error)
-                        )
-                    }
+                    .onFailure { error -> showPersistentError(error) }
             }
         }
+    }
+
+    private fun showPersistentError(error: Throwable) {
+        _uiState.value = _uiState.value.copy(
+            isRefreshing = false,
+            isApplying = false,
+            operationMessage = userMessage(error)
+        )
     }
 
     private fun DensitySystemState.toUiState(
@@ -222,7 +222,7 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
 
         val label = when {
             !hasOverride -> "DPI original · $currentDensity DPI"
-            preset != null -> "${preset.title} · ${preset.density} DPI"
+            preset != null -> "${preset.displayName} · ${preset.density} DPI"
             else -> "DPI personalizado · $currentDensity DPI"
         }
 
