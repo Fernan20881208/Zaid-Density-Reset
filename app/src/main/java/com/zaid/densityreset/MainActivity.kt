@@ -497,7 +497,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderSelection(view: View, selected: Boolean) {
+        if (view.isSelected == selected) return
         view.isSelected = selected
+        view.animate().cancel()
         view.animate()
             .scaleX(if (selected) 1.015f else 1f)
             .scaleY(if (selected) 1.015f else 1f)
@@ -507,13 +509,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun animateCheck(view: View, visible: Boolean) {
+        val currentlyVisible = view.visibility == View.VISIBLE
+        if (visible == currentlyVisible) return
+        view.animate().cancel()
         if (visible) {
-            if (view.visibility != View.VISIBLE) {
-                view.visibility = View.VISIBLE
-                view.alpha = 0f
-                view.scaleX = 0.65f
-                view.scaleY = 0.65f
-            }
+            view.visibility = View.VISIBLE
+            view.alpha = 0f
+            view.scaleX = 0.65f
+            view.scaleY = 0.65f
             view.animate()
                 .alpha(1f)
                 .scaleX(1f)
@@ -521,7 +524,7 @@ class MainActivity : AppCompatActivity() {
                 .setDuration(180L)
                 .setInterpolator(OvershootInterpolator())
                 .start()
-        } else if (view.visibility == View.VISIBLE) {
+        } else {
             view.animate()
                 .alpha(0f)
                 .scaleX(0.65f)
@@ -620,20 +623,23 @@ class MainActivity : AppCompatActivity() {
         completed: Boolean,
         current: Boolean
     ) {
-        view.text = "${when {
+        val newText = "${when {
             completed -> "✓"
             current -> "●"
             else -> "○"
         }} $label"
-        view.setTextColor(
-            color(
-                when {
-                    completed -> R.color.status_success
-                    current -> R.color.glass_accent_secondary
-                    else -> R.color.glass_text_secondary
-                }
-            )
+        val newColor = color(
+            when {
+                completed -> R.color.status_success
+                current -> R.color.glass_accent_secondary
+                else -> R.color.glass_text_secondary
+            }
         )
+        if (view.text.toString() == newText && view.currentTextColor == newColor) return
+        view.animate().cancel()
+        view.alpha = 0.55f
+        view.text = newText
+        view.setTextColor(newColor)
         view.animate().alpha(1f).setDuration(160L).start()
     }
 
@@ -798,7 +804,6 @@ class MainActivity : AppCompatActivity() {
                 color(if (result.success) R.color.status_success else R.color.status_error)
             )
             if (result.success) {
-                showSnackbar(result.message)
                 densityViewModel.recordExternalReset()
             } else {
                 showMessage(result.message)
