@@ -7,6 +7,7 @@
     <string name="section_accessibility">Atajo de accesibilidad</string>
     <string name="section_settings">Preferencias</string>
     <string name="section_multi_dpi">DPI múltiple</string>
+    <string name="section_game_profiles">Perfiles por juego</string>
     <string name="section_test">Prueba rápida</string>
     <string name="section_contact">Contacto</string>
 
@@ -55,13 +56,16 @@
 
     <string name="preset_ultra_title">Sensi Ultra</string>
     <string name="preset_ultra_dpi">20 DPI</string>
-    <string name="preset_ultra_description">Sensibilidad extrema</string>
+    <string name="preset_ultra_description">Escala extrema</string>
+    <string name="preset_ultra_game_description">Escala extrema</string>
     <string name="preset_high_title">Sensi Alta</string>
     <string name="preset_high_dpi">72 DPI</string>
-    <string name="preset_high_description">Sensibilidad alta</string>
+    <string name="preset_high_description">Escala competitiva</string>
+    <string name="preset_high_game_description">Escala competitiva</string>
     <string name="preset_low_title">Sensi Baja</string>
     <string name="preset_low_dpi">280 DPI</string>
-    <string name="preset_low_description">Sensibilidad estable</string>
+    <string name="preset_low_description">Escala equilibrada</string>
+    <string name="preset_low_game_description">Escala equilibrada</string>
     <string name="preset_active">Activo</string>
     <string name="preset_inactive">Inactivo</string>
     <string name="reading_density">Comprobando DPI…</string>
@@ -71,6 +75,7 @@
     <string name="applying_configuration">Aplicando configuración…</string>
     <string name="dpi_applied_successfully">DPI aplicado correctamente</string>
     <string name="dpi_reset_successfully">DPI restablecido correctamente.</string>
+    <string name="dpi_restored_successfully">DPI restaurado correctamente</string>
     <string name="emergency_reset_density">Restablecer DPI de emergencia</string>
     <string name="no_density_changes">Sin cambios registrados.</string>
     <string name="last_density_change">Último cambio: %1$s</string>
@@ -81,6 +86,34 @@
     <string name="hold_to_apply_ultra">Aplicar Sensi Ultra · mantener</string>
     <string name="keep_holding">Sigue presionando…</string>
     <string name="cancel">Cancelar</string>
+
+    <string name="game_profiles_summary">Elige un juego y un perfil. El DPI temporal se restaura automáticamente después de 30 segundos.</string>
+    <string name="select_game_title">Selecciona un juego</string>
+    <string name="select_game_density_title">Selecciona un perfil de DPI</string>
+    <string name="free_fire">Free Fire</string>
+    <string name="free_fire_max">Free Fire MAX</string>
+    <string name="checking_installation">Comprobando instalación…</string>
+    <string name="game_installed">Instalado</string>
+    <string name="game_not_installed">No instalado</string>
+    <string name="select_a_game">Selecciona un juego</string>
+    <string name="select_a_profile">Selecciona un perfil</string>
+    <string name="start_game_with_profile">Iniciar %1$s con %2$s</string>
+    <string name="start_session">Iniciar sesión</string>
+    <string name="restore_now">Restaurar ahora</string>
+    <string name="game_session_preparing">Preparando sesión…</string>
+    <string name="game_session_active">Sesión de DPI activa</string>
+    <string name="game_session_restoring">Restaurando DPI…</string>
+    <string name="game_session_attention">La sesión requiere atención</string>
+    <string name="game_session_checking_state">Comprobando el estado guardado.</string>
+    <string name="game_session_invalid_configuration">La configuración de la sesión no es válida.</string>
+    <string name="game_session_unexpected_error">Ocurrió un error durante la sesión.</string>
+    <string name="game_session_restore_failed">No fue posible restaurar el DPI. Inicia Shizuku y pulsa “Restaurar ahora”.</string>
+    <string name="game_session_channel_name">Sesiones de DPI por juego</string>
+    <string name="game_session_channel_description">Mantiene y restaura el DPI temporal durante una sesión de juego.</string>
+    <string name="notification_permission_required">Permite las notificaciones para iniciar una sesión y conservar el botón de restauración.</string>
+    <string name="session_active_seconds">Sesión activa · %1$d s</string>
+    <string name="session_game_profile_format">%1$s · %2$s · %3$d DPI</string>
+    <string name="session_previous_density">DPI anterior: %1$d</string>
 
     <string name="result_waiting">El resultado aparecerá aquí.</string>
     <string name="density_reset_success">Densidad restablecida correctamente.</string>
