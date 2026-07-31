@@ -42,6 +42,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
     private var persistedState = GameSessionState()
     private var localSelectedGame: SupportedGame? = null
     private var localSelectedPreset: DensityPreset? = null
+    private var localStartRequested = false
     private var recoveryRequested = false
 
     private val shizukuListener: (ShizukuManager.State) -> Unit = { state ->
@@ -57,6 +58,9 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             repository.state.collect { state ->
                 persistedState = state
+                if (state.sessionActive) {
+                    localStartRequested = false
+                }
                 if (state.sessionActive && !recoveryRequested) {
                     recoveryRequested = true
                     sessionController.recoverPendingSession()
@@ -64,6 +68,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
                 if (!state.sessionActive) recoveryRequested = false
 
                 state.lastResultMessage?.let { message ->
+                    localStartRequested = false
                     _events.emit(message)
                     repository.consumeLastResult()
                 }
@@ -73,7 +78,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             while (true) {
-                rebuildState()
+                if (persistedState.sessionActive) rebuildState()
                 delay(COUNTDOWN_TICK_MILLIS)
             }
         }
@@ -121,17 +126,24 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
             val message = when {
                 game !in state.installedGames -> "Este juego no está instalado."
                 !state.shizukuReady -> "Shizuku no está ejecutándose o no tiene permiso."
-                state.sessionActive -> "Ya existe una sesión de DPI activa."
+                state.sessionActive || localStartRequested ->
+                    "Ya existe una sesión de DPI activa."
                 else -> "No es posible iniciar la sesión en este momento."
             }
             _events.tryEmit(message)
             return
         }
 
+        localStartRequested = true
+        rebuildState()
         viewModelScope.launch {
             when (val result = sessionController.startSession(game, preset)) {
-                is GameSessionResult.Success -> Unit
-                is GameSessionResult.Failure -> _events.emit(result.message)
+                is GameSessionResult.Success -> scheduleStartRequestGuard()
+                is GameSessionResult.Failure -> {
+                    localStartRequested = false
+                    rebuildState()
+                    _events.emit(result.message)
+                }
             }
         }
     }
@@ -141,6 +153,17 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
             when (val result = sessionController.restoreNow()) {
                 is GameSessionResult.Success -> Unit
                 is GameSessionResult.Failure -> _events.emit(result.message)
+            }
+        }
+    }
+
+    private fun scheduleStartRequestGuard() {
+        viewModelScope.launch {
+            delay(START_REQUEST_GUARD_MILLIS)
+            if (localStartRequested && !persistedState.sessionActive) {
+                localStartRequested = false
+                rebuildState()
+                _events.emit("La sesión no pudo iniciarse. Inténtalo nuevamente.")
             }
         }
     }
@@ -160,7 +183,14 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
         } else {
             localSelectedPreset
         }
-        val operationLocked = isBusyStep(session.currentStep) || session.sessionActive
+        val effectiveStep = when {
+            session.sessionActive -> session.currentStep
+            localStartRequested && session.currentStep in PRE_SESSION_STEPS ->
+                session.currentStep
+            localStartRequested -> SessionStep.VALIDATING
+            else -> SessionStep.IDLE
+        }
+        val operationLocked = localStartRequested || session.sessionActive
         val secondsRemaining = if (session.sessionActive) {
             session.restoreAt?.let { restoreAt ->
                 ceil(
@@ -178,7 +208,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
             installedGames = installedGames,
             shizukuReady = shizukuReady,
             sessionActive = session.sessionActive,
-            currentStep = session.currentStep,
+            currentStep = effectiveStep,
             secondsRemaining = secondsRemaining,
             activeDensity = session.targetDensity,
             previousDensity = session.snapshot?.effectiveDensity,
@@ -192,18 +222,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun isOperationLocked(): Boolean =
-        persistedState.sessionActive || isBusyStep(persistedState.currentStep)
-
-    private fun isBusyStep(step: SessionStep): Boolean = step in setOf(
-        SessionStep.VALIDATING,
-        SessionStep.SAVING_DENSITY,
-        SessionStep.CLOSING_GAME,
-        SessionStep.APPLYING_DENSITY,
-        SessionStep.VERIFYING_DENSITY,
-        SessionStep.OPENING_GAME,
-        SessionStep.SESSION_ACTIVE,
-        SessionStep.RESTORING_DENSITY
-    )
+        localStartRequested || persistedState.sessionActive
 
     override fun onCleared() {
         ShizukuManager.removeStateListener(shizukuListener)
@@ -212,5 +231,15 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val COUNTDOWN_TICK_MILLIS = 500L
+        const val START_REQUEST_GUARD_MILLIS = 20_000L
+
+        val PRE_SESSION_STEPS = setOf(
+            SessionStep.VALIDATING,
+            SessionStep.SAVING_DENSITY,
+            SessionStep.CLOSING_GAME,
+            SessionStep.APPLYING_DENSITY,
+            SessionStep.VERIFYING_DENSITY,
+            SessionStep.OPENING_GAME
+        )
     }
 }
