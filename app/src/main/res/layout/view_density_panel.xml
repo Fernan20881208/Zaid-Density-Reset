@@ -4,10 +4,11 @@
     android:id="@+id/densityPanelRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="14dp"
+    android:layout_marginTop="16dp"
     android:background="@drawable/bg_glass_panel"
+    android:clipToOutline="true"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:padding="24dp">
 
     <TextView
         android:layout_width="match_parent"
@@ -15,13 +16,13 @@
         android:fontFamily="sans-serif-medium"
         android:text="@string/section_multi_dpi"
         android:textColor="@color/glass_text_primary"
-        android:textSize="19sp" />
+        android:textSize="20sp" />
 
     <TextView
         android:id="@+id/densityStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="20dp"
         android:fontFamily="sans-serif-medium"
         android:text="@string/reading_density"
         android:textColor="@color/glass_accent_secondary"
@@ -31,7 +32,7 @@
         android:id="@+id/densityCurrentValue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_marginTop="4dp"
         android:text="@string/current_density_unknown"
         android:textColor="@color/glass_text_muted"
         android:textSize="12sp" />
@@ -40,15 +41,16 @@
         android:id="@+id/presetUltra"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="24dp"
         android:background="@drawable/bg_density_preset"
         android:clickable="true"
+        android:clipToOutline="true"
         android:focusable="true"
         android:gravity="center_vertical"
-        android:minHeight="82dp"
+        android:minHeight="92dp"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="18dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -57,18 +59,22 @@
             android:orientation="vertical">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
                 android:text="@string/preset_ultra_title"
                 android:textColor="@color/glass_text_primary"
                 android:textSize="16sp" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/preset_ultra_description"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/preset_ultra_game_description"
                 android:textColor="@color/glass_text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -76,6 +82,7 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
             android:gravity="end"
             android:orientation="vertical">
 
@@ -83,7 +90,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="@string/preset_ultra_dpi"
+                android:maxLines="1"
+                android:text="20 DPI"
                 android:textColor="@color/glass_accent_secondary"
                 android:textSize="16sp" />
 
@@ -91,7 +99,8 @@
                 android:id="@+id/presetUltraState"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
                 android:text="@string/preset_inactive"
                 android:textColor="@color/glass_text_muted"
                 android:textSize="11sp" />
@@ -102,15 +111,16 @@
         android:id="@+id/presetHigh"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_density_preset"
         android:clickable="true"
+        android:clipToOutline="true"
         android:focusable="true"
         android:gravity="center_vertical"
-        android:minHeight="82dp"
+        android:minHeight="92dp"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="18dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -119,18 +129,22 @@
             android:orientation="vertical">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
                 android:text="@string/preset_high_title"
                 android:textColor="@color/glass_text_primary"
                 android:textSize="16sp" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/preset_high_description"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/preset_high_game_description"
                 android:textColor="@color/glass_text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -138,6 +152,7 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
             android:gravity="end"
             android:orientation="vertical">
 
@@ -145,7 +160,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="@string/preset_high_dpi"
+                android:maxLines="1"
+                android:text="72 DPI"
                 android:textColor="@color/glass_accent_secondary"
                 android:textSize="16sp" />
 
@@ -153,7 +169,8 @@
                 android:id="@+id/presetHighState"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
                 android:text="@string/preset_inactive"
                 android:textColor="@color/glass_text_muted"
                 android:textSize="11sp" />
@@ -164,15 +181,16 @@
         android:id="@+id/presetLow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_density_preset"
         android:clickable="true"
+        android:clipToOutline="true"
         android:focusable="true"
         android:gravity="center_vertical"
-        android:minHeight="82dp"
+        android:minHeight="92dp"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="18dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -181,18 +199,22 @@
             android:orientation="vertical">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
                 android:text="@string/preset_low_title"
                 android:textColor="@color/glass_text_primary"
                 android:textSize="16sp" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/preset_low_description"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/preset_low_game_description"
                 android:textColor="@color/glass_text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -200,6 +222,7 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
             android:gravity="end"
             android:orientation="vertical">
 
@@ -207,7 +230,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="@string/preset_low_dpi"
+                android:maxLines="1"
+                android:text="280 DPI"
                 android:textColor="@color/glass_accent_secondary"
                 android:textSize="16sp" />
 
@@ -215,7 +239,8 @@
                 android:id="@+id/presetLowState"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
                 android:text="@string/preset_inactive"
                 android:textColor="@color/glass_text_muted"
                 android:textSize="11sp" />
@@ -226,7 +251,7 @@
         android:id="@+id/densityProgressContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="20dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
@@ -240,7 +265,7 @@
             android:id="@+id/densityProgressText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:text="@string/applying_configuration"
             android:textColor="@color/glass_text_secondary"
@@ -251,16 +276,18 @@
         android:id="@+id/densityOperationMessage"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:text="@string/select_density_profile"
-        android:textColor="@color/glass_text_secondary"
-        android:textSize="13sp" />
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_error_message"
+        android:padding="14dp"
+        android:textColor="@color/status_error"
+        android:textSize="13sp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/densityLastChange"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="16dp"
         android:text="@string/no_density_changes"
         android:textColor="@color/glass_text_muted"
         android:textSize="11sp" />
@@ -269,7 +296,7 @@
         android:id="@+id/buttonEmergencyReset"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="20dp"
         android:background="@drawable/bg_glass_button_secondary"
         android:fontFamily="sans-serif-medium"
         android:stateListAnimator="@null"

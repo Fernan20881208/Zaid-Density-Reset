@@ -15,8 +15,8 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.3.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -118,6 +118,7 @@ val decodeBrandAssets by tasks.registering {
             "El recurso generado no coincide con file.svg."
         }
 
+        val chunks = backgroundBase64.chunked(4_000)
         imageAssetsOutput.get().asFile.apply {
             parentFile.mkdirs()
             writeText(
@@ -126,13 +127,11 @@ val decodeBrandAssets by tasks.registering {
                     appendLine()
                     appendLine("object ImageAssets {")
                     appendLine("    const val BACKGROUND_BASE64: String =")
-                    backgroundBase64.chunked(4_000).forEachIndexed { index, chunk ->
+                    chunks.forEachIndexed { index, chunk ->
                         append("        \"")
                         append(chunk)
                         append("\"")
-                        if (index != backgroundBase64.chunked(4_000).lastIndex) {
-                            append(" +")
-                        }
+                        if (index != chunks.lastIndex) append(" +")
                         appendLine()
                     }
                     appendLine("}")
@@ -158,6 +157,8 @@ dependencies {
 
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 kotlin {
