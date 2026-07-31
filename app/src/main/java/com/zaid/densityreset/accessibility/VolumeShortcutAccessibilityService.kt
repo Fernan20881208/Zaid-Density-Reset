@@ -11,6 +11,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import com.zaid.densityreset.density.DensityPreferencesRepository
 import com.zaid.densityreset.density.ShizukuDensityController
+import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
+import com.zaid.densityreset.gameprofile.service.DpiGameSessionService
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AppPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +31,9 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     }
     private val densityPreferences by lazy {
         DensityPreferencesRepository(applicationContext)
+    }
+    private val gameSessionRepository by lazy {
+        GameSessionRepositoryImpl(applicationContext)
     }
 
     private var volumeUpPressed = false
@@ -113,6 +118,21 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
 
     private fun executeDensityReset() {
         serviceScope.launch {
+            val activeSession = gameSessionRepository.read().sessionActive
+            if (activeSession) {
+                DpiGameSessionService.restoreNow(
+                    context = this@VolumeShortcutAccessibilityService,
+                    source = DpiGameSessionService.RESTORE_SOURCE_VOLUME
+                )
+                vibrateBriefly()
+                Toast.makeText(
+                    this@VolumeShortcutAccessibilityService,
+                    "Restaurando el DPI anterior…",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
             val result = densityController.resetDensity()
             val message = result.fold(
                 onSuccess = {
@@ -132,7 +152,12 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
                 Toast.LENGTH_LONG
             ).show()
 
-            if (result.isSuccess && AppPreferences.shouldVibrateAfterSuccess(this@VolumeShortcutAccessibilityService)) {
+            if (
+                result.isSuccess &&
+                AppPreferences.shouldVibrateAfterSuccess(
+                    this@VolumeShortcutAccessibilityService
+                )
+            ) {
                 vibrateBriefly()
             }
         }
