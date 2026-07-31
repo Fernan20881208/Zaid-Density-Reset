@@ -180,25 +180,25 @@ class DpiGameSessionService : Service() {
         val shizuku = ShizukuManager.currentState()
         when {
             !gameController.isInstalled(game) -> {
-                failBeforeSnapshot("Este juego no está instalado.")
+                failWithoutRestoration("Este juego no está instalado.")
                 return
             }
             !shizuku.installed -> {
-                failBeforeSnapshot("Shizuku no está instalado.")
+                failWithoutRestoration("Shizuku no está instalado.")
                 return
             }
             !shizuku.running -> {
-                failBeforeSnapshot("Shizuku no está ejecutándose.")
+                failWithoutRestoration("Shizuku no está ejecutándose.")
                 return
             }
             !shizuku.permissionGranted -> {
-                failBeforeSnapshot("Permiso de Shizuku denegado.")
+                failWithoutRestoration("Permiso de Shizuku denegado.")
                 return
             }
         }
 
         val originalState = densityController.getSystemState().getOrElse { error ->
-            failBeforeSnapshot(
+            failWithoutRestoration(
                 error.message ?: "No fue posible acceder a WindowManager."
             )
             return
@@ -220,7 +220,7 @@ class DpiGameSessionService : Service() {
         repository.updateStep(SessionStep.CLOSING_GAME)
         updateNotification(game, preset, SessionStep.CLOSING_GAME, null)
         gameController.forceStop(game).getOrElse {
-            abortAndRestore("No se pudo reiniciar el juego.")
+            failWithoutRestoration("No se pudo reiniciar el juego.")
             return
         }
 
@@ -382,7 +382,7 @@ class DpiGameSessionService : Service() {
         }
     }
 
-    private suspend fun failBeforeSnapshot(message: String) {
+    private suspend fun failWithoutRestoration(message: String) {
         repository.failAndClear(message)
         showToast(message)
         stopServiceCleanly()
