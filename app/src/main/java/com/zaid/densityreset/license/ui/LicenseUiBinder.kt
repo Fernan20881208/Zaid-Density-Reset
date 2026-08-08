@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.snackbar.Snackbar
 import com.zaid.densityreset.MainActivity
 import com.zaid.densityreset.R
 import com.zaid.densityreset.license.LicenseManager
@@ -28,10 +29,25 @@ object LicenseUiBinder {
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-                    if (activity is MainActivity) attach(activity)
+                    if (activity is MainActivity) {
+                        if (!LicenseManager.hasConfirmedAccessForProcess()) {
+                            redirectToGate(activity)
+                        } else {
+                            attach(activity)
+                        }
+                    }
                 }
+
+                override fun onActivityResumed(activity: Activity) {
+                    if (
+                        activity is MainActivity &&
+                        !LicenseManager.hasConfirmedAccessForProcess()
+                    ) {
+                        redirectToGate(activity)
+                    }
+                }
+
                 override fun onActivityStarted(activity: Activity) = Unit
-                override fun onActivityResumed(activity: Activity) = Unit
                 override fun onActivityPaused(activity: Activity) = Unit
                 override fun onActivityStopped(activity: Activity) = Unit
                 override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
@@ -60,8 +76,16 @@ object LicenseUiBinder {
         verify.setOnClickListener {
             verify.isEnabled = false
             activity.lifecycleScope.launch {
-                LicenseManager.validateNow()
+                val result = LicenseManager.validateNow()
                 verify.isEnabled = true
+                Snackbar.make(
+                    panel,
+                    result.message ?: activity.getString(
+                        if (result.success) R.string.license_verified_successfully
+                        else R.string.license_verification_failed
+                    ),
+                    Snackbar.LENGTH_LONG
+                ).show()
             }
         }
 
