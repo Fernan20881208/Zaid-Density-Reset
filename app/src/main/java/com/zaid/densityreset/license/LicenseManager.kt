@@ -53,7 +53,10 @@ object LicenseManager : DefaultLifecycleObserver {
     suspend fun activate(key: String): LicenseResult {
         val result = repository.activate(key)
         processAccessConfirmed = result.success
-        if (result.success) lastValidationAttemptElapsed = SystemClock.elapsedRealtime()
+        if (result.success) {
+            lastValidationAttemptElapsed = SystemClock.elapsedRealtime()
+            startPeriodicValidation()
+        }
         return result
     }
 
@@ -62,6 +65,7 @@ object LicenseManager : DefaultLifecycleObserver {
     suspend fun logout() {
         processAccessConfirmed = false
         periodicJob?.cancel()
+        periodicJob = null
         repository.logout()
     }
 
@@ -83,7 +87,9 @@ object LicenseManager : DefaultLifecycleObserver {
         lastValidationAttemptElapsed = SystemClock.elapsedRealtime()
         val result = repository.validate()
         processAccessConfirmed = result.success
-        if (!result.success) {
+        if (result.success) {
+            startPeriodicValidation()
+        } else {
             periodicJob?.cancel()
             periodicJob = null
         }
@@ -91,7 +97,7 @@ object LicenseManager : DefaultLifecycleObserver {
     }
 
     private fun startPeriodicValidation() {
-        if (periodicJob?.isActive == true) return
+        if (periodicJob?.isActive == true || !processAccessConfirmed) return
         periodicJob = scope.launch {
             while (processAccessConfirmed) {
                 delay(PERIODIC_VALIDATION_MILLIS)
