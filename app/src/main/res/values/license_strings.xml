@@ -10,6 +10,7 @@
     <string name="license_enter_key_prompt">Introduce una key válida para acceder a Density Reset.</string>
     <string name="license_invalid_key">La key introducida no es válida.</string>
     <string name="license_verification_failed">No fue posible verificar la licencia.</string>
+    <string name="license_verified_successfully">Licencia verificada correctamente.</string>
     <string name="license_expired_message">Esta licencia ha expirado.</string>
     <string name="license_revoked_message">Esta licencia fue revocada.</string>
     <string name="license_disabled_message">Esta licencia está deshabilitada temporalmente.</string>
