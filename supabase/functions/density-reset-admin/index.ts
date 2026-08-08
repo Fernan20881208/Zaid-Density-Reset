@@ -2,6 +2,7 @@ const assets = new Map<string, { file: string; type: string }>([
   ["/", { file: "index.html", type: "text/html; charset=utf-8" }],
   ["/index.html", { file: "index.html", type: "text/html; charset=utf-8" }],
   ["/app.js", { file: "app.js", type: "text/javascript; charset=utf-8" }],
+  ["/github-auth.js", { file: "github-auth.js", type: "text/javascript; charset=utf-8" }],
   ["/styles.css", { file: "styles.css", type: "text/css; charset=utf-8" }],
   ["/config.js", { file: "config.js", type: "text/javascript; charset=utf-8" }],
 ]);
