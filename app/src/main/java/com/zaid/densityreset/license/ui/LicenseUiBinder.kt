@@ -80,10 +80,11 @@ object LicenseUiBinder {
                 verify.isEnabled = true
                 Snackbar.make(
                     panel,
-                    result.message ?: activity.getString(
-                        if (result.success) R.string.license_verified_successfully
-                        else R.string.license_verification_failed
-                    ),
+                    result.message ?: if (result.success) {
+                        "Licencia verificada correctamente."
+                    } else {
+                        activity.getString(R.string.license_verification_failed)
+                    },
                     Snackbar.LENGTH_LONG
                 ).show()
             }
