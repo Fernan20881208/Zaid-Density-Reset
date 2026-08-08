@@ -9,7 +9,7 @@ plugins {
 
 val licenseApiUrl = providers.gradleProperty("LICENSE_API_URL")
     .orElse(providers.environmentVariable("LICENSE_API_URL"))
-    .orElse("https://example.invalid/functions/v1/license-api")
+    .orElse("https://zzlvupunploglgxbgllm.supabase.co/functions/v1/license-api")
     .get()
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
