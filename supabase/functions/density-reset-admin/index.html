@@ -14,7 +14,9 @@
       <h1>Density Reset Admin</h1>
       <p>Acceso privado mediante tu cuenta de GitHub autorizada en Supabase.</p>
       <form id="loginForm">
-        <button id="githubLogin" type="submit">Entrar con GitHub</button>
+        <button id="githubLogin" type="button">Entrar con GitHub</button>
+        <input id="email" type="hidden" />
+        <input id="password" type="hidden" />
         <div id="loginError" class="message error" hidden></div>
       </form>
     </section>
@@ -64,6 +66,7 @@
   </main>
 
   <dialog id="detailsDialog" class="glass dialog-card"><form method="dialog"><div class="section-heading"><h2>Detalles de licencia</h2><button value="cancel" class="secondary compact">Cerrar</button></div><div id="detailsContent"></div></form></dialog>
+  <script type="module" src="./github-auth.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
