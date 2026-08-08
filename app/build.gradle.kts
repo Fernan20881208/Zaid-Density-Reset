@@ -7,6 +7,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val licenseApiUrl = providers.gradleProperty("LICENSE_API_URL")
+    .orElse(providers.environmentVariable("LICENSE_API_URL"))
+    .orElse("https://example.invalid/functions/v1/license-api")
+    .get()
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.zaid.densityreset"
     compileSdk = 36
@@ -15,8 +22,11 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.3.1"
+        versionCode = 11
+        versionName = "1.4.0"
+
+        buildConfigField("String", "LICENSE_API_URL", "\"$licenseApiUrl\"")
+        buildConfigField("long", "LICENSE_OFFLINE_GRACE_HOURS", "12L")
 
         vectorDrawables {
             useSupportLibrary = true
@@ -151,6 +161,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.datastore:datastore-preferences:1.1.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.android.material:material:1.14.0")
