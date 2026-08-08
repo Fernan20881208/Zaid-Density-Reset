@@ -62,7 +62,10 @@ class LicenseGateActivity : AppCompatActivity() {
 
     private fun applyInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.licenseGateRoot) { view, insets ->
-            val safe = insets.getInsets(WindowInsetsCompat.Type.safeDrawing())
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout()
+            )
             view.setPadding(0, safe.top, 0, safe.bottom)
             insets
         }
