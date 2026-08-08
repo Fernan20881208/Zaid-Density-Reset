@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/licensePanelRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="14dp"
+    android:background="@drawable/bg_glass_panel"
+    android:clipToOutline="true"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:text="@string/license_section_title"
+        android:textColor="@color/glass_text_primary"
+        android:textSize="19sp" />
+
+    <TextView
+        android:id="@+id/licensePanelStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/license_checking"
+        android:textColor="@color/status_warning"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/licensePanelExpires"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/license_expiration_unknown"
+        android:textColor="@color/glass_text_secondary"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/licensePanelDevice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/license_device_linked"
+        android:textColor="@color/glass_text_muted"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/buttonVerifyLicense"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_glass_button_primary"
+        android:fontFamily="sans-serif-medium"
+        android:stateListAnimator="@null"
+        android:text="@string/license_verify_button"
+        android:textAllCaps="false"
+        android:textColor="@color/glass_button_text"
+        app:backgroundTint="@null" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/buttonLicenseLogout"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_glass_button_secondary"
+        android:fontFamily="sans-serif-medium"
+        android:stateListAnimator="@null"
+        android:text="@string/license_logout_button"
+        android:textAllCaps="false"
+        android:textColor="@color/glass_text_primary"
+        app:backgroundTint="@null" />
+</LinearLayout>

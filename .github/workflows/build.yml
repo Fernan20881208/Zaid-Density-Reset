@@ -28,6 +28,14 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Configurar Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Probar lógica de licencias
+        run: deno test supabase/functions/license-api/logic.test.ts
+
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
 
@@ -35,26 +43,26 @@ jobs:
         run: ./gradlew clean lintDebug testDebugUnitTest assembleDebug
 
       - name: Preparar nombre de distribución
-        run: cp app/build/outputs/apk/debug/app-debug.apk DensityReset-Zaid-v1.3.1.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk DensityReset-Zaid-v1.4.0.apk
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: DensityReset-Zaid-v1.3.1-apk
-          path: DensityReset-Zaid-v1.3.1.apk
+          name: DensityReset-Zaid-v1.4.0-apk
+          path: DensityReset-Zaid-v1.4.0.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publicar Release 1.3.1
+      - name: Publicar Release 1.4.0
         if: >-
           github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
-          contains(github.event.head_commit.message, 'release: Density Reset 1.3.1')
+          contains(github.event.head_commit.message, 'release: Density Reset 1.4.0')
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create v1.3.1
-          DensityReset-Zaid-v1.3.1.apk#DensityReset-Zaid-v1.3.1.apk
+          gh release create v1.4.0
+          DensityReset-Zaid-v1.4.0.apk#DensityReset-Zaid-v1.4.0.apk
           --target "$GITHUB_SHA"
-          --title "Density Reset 1.3.1 — flujo por juego simplificado"
-          --notes-file RELEASE_NOTES_1.3.1.md
+          --title "Density Reset 1.4.0 — licencias y panel admin"
+          --notes-file RELEASE_NOTES_1.4.0.md

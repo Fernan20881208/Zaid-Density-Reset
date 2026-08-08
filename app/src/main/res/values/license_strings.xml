@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="license_activation_title">Activa tu acceso</string>
+    <string name="license_activation_subtitle">Introduce la key proporcionada para continuar.</string>
+    <string name="license_key_hint">DR-XXXX-XXXX-XXXX-XXXX</string>
+    <string name="license_activate_button">Activar</string>
+    <string name="license_checking">Comprobando licencia…</string>
+    <string name="license_verifying">Verificando key…</string>
+    <string name="license_valid">✓ Key válida</string>
+    <string name="license_enter_key_prompt">Introduce una key válida para acceder a Density Reset.</string>
+    <string name="license_invalid_key">La key introducida no es válida.</string>
+    <string name="license_verification_failed">No fue posible verificar la licencia.</string>
+    <string name="license_verified_successfully">Licencia verificada correctamente.</string>
+    <string name="license_expired_message">Esta licencia ha expirado.</string>
+    <string name="license_revoked_message">Esta licencia fue revocada.</string>
+    <string name="license_disabled_message">Esta licencia está deshabilitada temporalmente.</string>
+    <string name="license_network_required">Conéctate a Internet para verificar tu licencia.</string>
+    <string name="license_app_version_blocked">Esta versión de Density Reset ya no está autorizada. Actualiza la aplicación.</string>
+
+    <string name="license_section_title">Licencia</string>
+    <string name="license_status_active">● Estado: Activa</string>
+    <string name="license_status_offline_grace">● Estado: Activa · modo offline temporal</string>
+    <string name="license_expiration_unknown">Expira: comprobando…</string>
+    <string name="license_expiration_value">Expira: %1$s</string>
+    <string name="license_permanent">Expira: Permanente</string>
+    <string name="license_device_linked">Dispositivo: Vinculado</string>
+    <string name="license_verify_button">Verificar licencia</string>
+    <string name="license_logout_button">Cerrar sesión</string>
+    <string name="license_logout_title">¿Cerrar sesión?</string>
+    <string name="license_logout_confirmation">Necesitarás introducir una key válida nuevamente. La vinculación del dispositivo no se eliminará del servidor.</string>
+</resources>
