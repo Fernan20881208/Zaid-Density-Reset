@@ -3,13 +3,14 @@ package com.zaid.densityreset.license.util
 object LicenseKeyFormatter {
     private const val PREFIX = "DR"
     private const val BODY_LENGTH = 16
-    private val normalizedPattern = Regex("^DR-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+    private val normalizedPattern =
+        Regex("^DR-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
 
     fun normalize(raw: String): String {
         val compact = raw
             .trim()
             .uppercase()
-            .filter { it.isLetterOrDigit() }
+            .filter { it in 'A'..'Z' || it in '0'..'9' }
         val body = if (compact.startsWith(PREFIX)) {
             compact.drop(PREFIX.length)
         } else {
