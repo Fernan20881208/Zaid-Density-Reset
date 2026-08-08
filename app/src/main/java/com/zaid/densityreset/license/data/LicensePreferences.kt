@@ -2,6 +2,7 @@ package com.zaid.densityreset.license.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -14,7 +15,8 @@ private val Context.licenseDataStore by preferencesDataStore(
 data class LicenseLocalState(
     val status: String?,
     val expiresAtEpochMillis: Long?,
-    val lastSuccessfulValidationEpochMillis: Long?
+    val lastSuccessfulValidationEpochMillis: Long?,
+    val offlineGraceHours: Int?
 )
 
 class LicensePreferences(
@@ -25,14 +27,16 @@ class LicensePreferences(
         return LicenseLocalState(
             status = values[STATUS],
             expiresAtEpochMillis = values[EXPIRES_AT],
-            lastSuccessfulValidationEpochMillis = values[LAST_SUCCESSFUL_VALIDATION]
+            lastSuccessfulValidationEpochMillis = values[LAST_SUCCESSFUL_VALIDATION],
+            offlineGraceHours = values[OFFLINE_GRACE_HOURS]
         )
     }
 
     suspend fun markSuccessfulValidation(
         status: String,
         expiresAtEpochMillis: Long?,
-        validatedAtEpochMillis: Long
+        validatedAtEpochMillis: Long,
+        offlineGraceHours: Int
     ) {
         context.licenseDataStore.edit { values ->
             values[STATUS] = status
@@ -42,6 +46,7 @@ class LicensePreferences(
                 values[EXPIRES_AT] = expiresAtEpochMillis
             }
             values[LAST_SUCCESSFUL_VALIDATION] = validatedAtEpochMillis
+            values[OFFLINE_GRACE_HOURS] = offlineGraceHours
         }
     }
 
@@ -67,5 +72,6 @@ class LicensePreferences(
         val STATUS = stringPreferencesKey("status")
         val EXPIRES_AT = longPreferencesKey("expires_at")
         val LAST_SUCCESSFUL_VALIDATION = longPreferencesKey("last_successful_validation")
+        val OFFLINE_GRACE_HOURS = intPreferencesKey("offline_grace_hours")
     }
 }
