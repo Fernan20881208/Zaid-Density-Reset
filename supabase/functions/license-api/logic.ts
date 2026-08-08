@@ -66,6 +66,13 @@ function base64UrlDecode(value: string): Uint8Array {
   return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
 }
 
+function base64UrlDecodeBuffer(value: string): ArrayBuffer {
+  const bytes = base64UrlDecode(value);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 async function importHmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
@@ -98,7 +105,7 @@ export async function verifyLicenseToken(
     const valid = await crypto.subtle.verify(
       "HMAC",
       await importHmacKey(secret),
-      base64UrlDecode(signaturePart),
+      base64UrlDecodeBuffer(signaturePart),
       new TextEncoder().encode(input),
     );
     if (!valid) return { ok: false, code: "INVALID_SESSION" };
