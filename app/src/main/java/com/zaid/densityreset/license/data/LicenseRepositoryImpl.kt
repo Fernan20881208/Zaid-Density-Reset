@@ -18,8 +18,7 @@ import java.time.Instant
 class LicenseRepositoryImpl(
     private val context: Context,
     private val apiClient: LicenseApiClient = LicenseApiClient(),
-    private val deviceIdentityProvider: DeviceIdentityProvider =
-        AndroidDeviceIdentityProvider(context),
+    private val deviceIdentityProvider: DeviceIdentityProvider = AndroidDeviceIdentityProvider(context),
     private val secureStore: SecureLicenseStore = SecureLicenseStore(context),
     private val preferences: LicensePreferences = LicensePreferences(context)
 ) : LicenseRepository {
@@ -110,9 +109,7 @@ class LicenseRepositoryImpl(
                 }
                 else -> {
                     val local = preferences.read()
-                    mutableState.value = if (
-                        local.lastSuccessfulValidationEpochMillis == null
-                    ) {
+                    mutableState.value = if (local.lastSuccessfulValidationEpochMillis == null) {
                         LicenseState.NoLicense
                     } else {
                         LicenseState.Error(LicensePolicy.userMessage(code))
@@ -125,6 +122,10 @@ class LicenseRepositoryImpl(
         val status = body.optString("status", "active")
         val expiresAt = parseInstant(body.optString("expiresAt", null))
         val tokenExpiresAt = parseInstant(body.optString("tokenExpiresAt", null))
+        val offlineGraceHours = body.optInt(
+            "offlineGraceHours",
+            BuildConfig.LICENSE_OFFLINE_GRACE_HOURS.toInt()
+        ).coerceIn(0, 168)
         val token = body.optString("licenseToken", null)
             ?.takeIf { it.isNotBlank() && it != "null" }
             ?: secureStore.read()?.token
@@ -141,7 +142,8 @@ class LicenseRepositoryImpl(
         preferences.markSuccessfulValidation(
             status = status,
             expiresAtEpochMillis = expiresAt?.toEpochMilli(),
-            validatedAtEpochMillis = now.toEpochMilli()
+            validatedAtEpochMillis = now.toEpochMilli(),
+            offlineGraceHours = offlineGraceHours
         )
         mutableState.value = LicenseState.Active(
             expiresAt = expiresAt,
@@ -153,7 +155,8 @@ class LicenseRepositoryImpl(
             status = status,
             expiresAt = expiresAt,
             tokenExpiresAt = tokenExpiresAt,
-            licenseToken = token
+            licenseToken = token,
+            offlineGraceHours = offlineGraceHours
         )
     }
 
@@ -162,13 +165,14 @@ class LicenseRepositoryImpl(
     ): LicenseResult {
         val local = preferences.read()
         val now = System.currentTimeMillis()
+        val graceHours = local.offlineGraceHours
+            ?: BuildConfig.LICENSE_OFFLINE_GRACE_HOURS.toInt()
         val canUseOffline = LicensePolicy.canUseOffline(
             nowEpochMillis = now,
-            lastSuccessfulValidationEpochMillis =
-                local.lastSuccessfulValidationEpochMillis,
+            lastSuccessfulValidationEpochMillis = local.lastSuccessfulValidationEpochMillis,
             licenseExpiresAtEpochMillis = local.expiresAtEpochMillis,
             tokenExpiresAtEpochMillis = session.tokenExpiresAtEpochMillis,
-            gracePeriodMillis = BuildConfig.LICENSE_OFFLINE_GRACE_HOURS * 60L * 60L * 1_000L
+            gracePeriodMillis = graceHours * 60L * 60L * 1_000L
         )
 
         if (canUseOffline) {
@@ -176,22 +180,19 @@ class LicenseRepositoryImpl(
             mutableState.value = LicenseState.Active(
                 expiresAt = expiresAt,
                 offlineGrace = true,
-                lastValidatedAt = local.lastSuccessfulValidationEpochMillis
-                    ?.let(Instant::ofEpochMilli)
+                lastValidatedAt = local.lastSuccessfulValidationEpochMillis?.let(Instant::ofEpochMilli)
             )
             return LicenseResult(
                 success = true,
                 status = local.status ?: "active",
                 expiresAt = expiresAt,
+                offlineGraceHours = graceHours,
                 offlineGrace = true,
                 message = "Acceso temporal sin conexión."
             )
         }
 
-        if (
-            local.expiresAtEpochMillis != null &&
-            now >= local.expiresAtEpochMillis
-        ) {
+        if (local.expiresAtEpochMillis != null && now >= local.expiresAtEpochMillis) {
             val expiresAt = Instant.ofEpochMilli(local.expiresAtEpochMillis)
             mutableState.value = LicenseState.Expired(expiresAt)
             return failure(LicenseErrorCode.LICENSE_EXPIRED, expiresAt)
