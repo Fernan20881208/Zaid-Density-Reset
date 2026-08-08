@@ -12,11 +12,17 @@
     <section id="loginView" class="glass auth-card">
       <div class="eyebrow">DENSITY RESET</div>
       <h1>Density Reset Admin</h1>
-      <p>Acceso privado para administrar licencias.</p>
+      <p>Acceso privado mediante Supabase Auth.</p>
       <form id="loginForm" autocomplete="on">
-        <label>Correo<input id="email" type="email" autocomplete="username" required /></label>
-        <label>Contraseña<input id="password" type="password" autocomplete="current-password" required /></label>
+        <label>Correo
+          <input id="email" type="email" autocomplete="username" required />
+        </label>
+        <label>Contraseña
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
         <button type="submit">Entrar</button>
+        <div class="auth-divider"><span>o</span></div>
+        <button id="githubLogin" type="button" class="secondary">Entrar con GitHub</button>
         <div id="loginError" class="message error" hidden></div>
       </form>
     </section>
@@ -66,6 +72,7 @@
   </main>
 
   <dialog id="detailsDialog" class="glass dialog-card"><form method="dialog"><div class="section-heading"><h2>Detalles de licencia</h2><button value="cancel" class="secondary compact">Cerrar</button></div><div id="detailsContent"></div></form></dialog>
+  <script type="module" src="./github-auth.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
