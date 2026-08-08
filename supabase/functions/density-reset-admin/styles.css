@@ -45,6 +45,8 @@ button.compact { padding: .52rem .78rem; }
 .eyebrow { font-size: .76rem; letter-spacing: .18em; color: #9deaf4; font-weight: 800; }
 form label { display: flex; flex-direction: column; gap: .45rem; color: rgba(232,237,245,.9); font-size: .9rem; }
 .auth-card form { display: grid; gap: 16px; margin-top: 24px; }
+.auth-divider { display: flex; align-items: center; gap: 12px; color: rgba(232,237,245,.55); font-size: .8rem; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: rgba(200,229,255,.18); }
 input, select, textarea {
   width: 100%;
   border: 1px solid rgba(200,229,255,.3);
