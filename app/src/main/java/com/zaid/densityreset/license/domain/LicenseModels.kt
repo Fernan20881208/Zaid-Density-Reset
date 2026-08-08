@@ -46,6 +46,7 @@ data class LicenseResult(
     val expiresAt: Instant? = null,
     val tokenExpiresAt: Instant? = null,
     val licenseToken: String? = null,
+    val offlineGraceHours: Int? = null,
     val code: LicenseErrorCode? = null,
     val message: String? = null,
     val offlineGrace: Boolean = false
