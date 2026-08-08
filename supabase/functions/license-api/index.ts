@@ -15,12 +15,13 @@ import {
 const SUPABASE_URL = requiredEnv("SUPABASE_URL");
 const SUPABASE_ANON_KEY = requiredEnv("SUPABASE_ANON_KEY");
 const SUPABASE_SERVICE_ROLE_KEY = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-const LICENSE_SIGNING_SECRET = requiredEnv("LICENSE_SIGNING_SECRET");
 const ALLOWED_PACKAGE_NAME = Deno.env.get("ALLOWED_PACKAGE_NAME") ?? "com.zaidnavarro.ds";
 
 const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+
+let cachedSigningSecret: string | null = null;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -127,7 +128,7 @@ async function validateLicense(request: Request): Promise<Response> {
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
   if (!token) return apiError("INVALID_SESSION", 401);
 
-  const verified = await verifyLicenseToken(token, LICENSE_SIGNING_SECRET, deviceHash);
+  const verified = await verifyLicenseToken(token, await getSigningSecret(), deviceHash);
   if (!verified.ok) return apiError(verified.code, verified.code === "TOKEN_EXPIRED" ? 401 : 403);
 
   const { data, error } = await service.rpc("validate_license_session", {
@@ -393,8 +394,25 @@ async function issueToken(licenseId: string, deviceHash: string, expiresAt: stri
     issuedAt,
     exp,
     nonce: crypto.randomUUID(),
-  }, LICENSE_SIGNING_SECRET);
+  }, await getSigningSecret());
   return { value, expiresAt: new Date(exp * 1000).toISOString() };
+}
+
+async function getSigningSecret(): Promise<string> {
+  if (cachedSigningSecret) return cachedSigningSecret;
+
+  const configured = Deno.env.get("LICENSE_SIGNING_SECRET")?.trim();
+  if (configured) {
+    cachedSigningSecret = configured;
+    return configured;
+  }
+
+  const { data, error } = await service.rpc("get_license_signing_secret");
+  if (error || typeof data !== "string" || data.length < 32) {
+    throw new Error("license signing secret unavailable");
+  }
+  cachedSigningSecret = data;
+  return data;
 }
 
 async function getSettings(): Promise<Settings> {
