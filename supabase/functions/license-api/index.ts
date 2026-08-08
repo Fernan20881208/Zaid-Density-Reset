@@ -1,16 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  calculateTokenExpiry,
-  generateLicenseKey,
-  isValidLicenseKey,
-  keyPrefix,
-  keySuffix,
-  maskedKey,
-  normalizeLicenseKey,
-  sha256Hex,
-  signLicenseToken,
-  verifyLicenseToken,
-} from "./logic.ts";
+import { calculateTokenExpiry, generateLicenseKey, isValidLicenseKey, keyPrefix, keySuffix, maskedKey, normalizeLicenseKey, sha256Hex, signLicenseToken, verifyLicenseToken } from "./logic.ts";
 
 const SUPABASE_URL = requiredEnv("SUPABASE_URL");
 const SUPABASE_ANON_KEY = requiredEnv("SUPABASE_ANON_KEY");
@@ -110,6 +99,7 @@ async function activateLicense(request: Request): Promise<Response> {
     expiresAt: data.expires_at ?? null,
     licenseToken: token.value,
     tokenExpiresAt: token.expiresAt,
+    offlineGraceHours: settings.offline_grace_hours,
   });
 }
 
@@ -150,6 +140,7 @@ async function validateLicense(request: Request): Promise<Response> {
     expiresAt: data.expires_at ?? null,
     licenseToken: refreshed.value,
     tokenExpiresAt: refreshed.expiresAt,
+    offlineGraceHours: settings.offline_grace_hours,
   });
 }
 
