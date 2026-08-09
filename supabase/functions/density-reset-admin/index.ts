@@ -1,4 +1,5 @@
 const BASE_PATH = "/functions/v1/density-reset-admin";
+const FUNCTION_MARKER = "/density-reset-admin";
 const RAW_BASE = "https://raw.githubusercontent.com/Fernan20881208/Zaid-Density-Reset/main/supabase/functions/density-reset-admin";
 
 const commonHeaders = {
@@ -33,19 +34,31 @@ function assetResponse(
   });
 }
 
+function routeSuffix(pathname: string): string {
+  if (!pathname || pathname === "/") return "/";
+
+  const markerIndex = pathname.lastIndexOf(FUNCTION_MARKER);
+  if (markerIndex >= 0) {
+    const suffix = pathname.slice(markerIndex + FUNCTION_MARKER.length);
+    return suffix || "/";
+  }
+
+  // Supabase Edge Runtime may provide a pathname already stripped of the
+  // public /functions/v1/<function-name> prefix. Support that form too.
+  return pathname.startsWith("/") ? pathname : `/${pathname}`;
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405 });
   }
 
   const { pathname } = new URL(request.url);
-  const suffix = pathname.startsWith(BASE_PATH)
-    ? pathname.slice(BASE_PATH.length)
-    : pathname;
+  const suffix = routeSuffix(pathname);
 
   if (suffix === "/health") {
     return Response.json(
-      { ok: true, service: "density-reset-admin", version: 16 },
+      { ok: true, service: "density-reset-admin", version: 17 },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
