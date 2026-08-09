@@ -36,6 +36,45 @@ jobs:
       - name: Probar lógica de licencias
         run: deno test supabase/functions/license-api/logic.test.ts
 
+      - name: Verificar panel admin desplegado
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://zzlvupunploglgxbgllm.supabase.co/functions/v1/density-reset-admin"
+          ASSETS="https://cdn.jsdelivr.net/gh/Fernan20881208/Zaid-Density-Reset@fb0bbc07a9f49d2643b05868928a95a46dbd857a/supabase/functions/density-reset-admin"
+
+          check_200() {
+            local url="$1"
+            local out="$2"
+            local status
+            status="$(curl --retry 3 --retry-delay 2 -sS -o "$out" -w '%{http_code}' "$url")"
+            test "$status" = "200" || { echo "HTTP $status en $url"; cat "$out" || true; exit 1; }
+          }
+
+          check_200 "$BASE" /tmp/admin.html
+          grep -Fq '<title>Density Reset Admin</title>' /tmp/admin.html
+          grep -Fq 'Entrar con GitHub' /tmp/admin.html
+          grep -Fq 'Generar licencia' /tmp/admin.html
+          grep -Fq "$ASSETS/styles.css" /tmp/admin.html
+          grep -Fq "$ASSETS/app.js" /tmp/admin.html
+
+          check_200 "$ASSETS/styles.css" /tmp/styles.css
+          grep -Fq '.auth-card' /tmp/styles.css
+
+          check_200 "$ASSETS/app.js" /tmp/app.js
+          grep -Fq 'loadDashboard' /tmp/app.js
+          grep -Fq '/admin/licenses/create' /tmp/app.js
+
+          check_200 "$ASSETS/github-auth.js" /tmp/github-auth.js
+          grep -Fq 'signInWithOAuth' /tmp/github-auth.js
+
+          check_200 "$ASSETS/config.js" /tmp/config.js
+          grep -Fq 'LICENSE_API_URL' /tmp/config.js
+
+          check_200 "$BASE/health" /tmp/health.json
+          grep -Fq '"ok":true' /tmp/health.json
+          grep -Fq '"version":10' /tmp/health.json
+
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
 
