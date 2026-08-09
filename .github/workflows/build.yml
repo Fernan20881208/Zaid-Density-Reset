@@ -36,6 +36,43 @@ jobs:
       - name: Probar lógica de licencias
         run: deno test supabase/functions/license-api/logic.test.ts
 
+      - name: Verificar panel admin desplegado
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://zzlvupunploglgxbgllm.supabase.co/functions/v1/density-reset-admin"
+
+          check_200() {
+            local url="$1"
+            local out="$2"
+            local status
+            status="$(curl --retry 3 --retry-delay 2 --fail-with-body -sS -o "$out" -w '%{http_code}' "$url")"
+            if [ "$status" != "200" ]; then
+              echo "Esperaba HTTP 200 en $url y recibí $status"
+              cat "$out" || true
+              exit 1
+            fi
+          }
+
+          check_200 "$BASE" /tmp/admin.html
+          grep -Fq '<title>Density Reset Admin</title>' /tmp/admin.html
+          grep -Fq 'Entrar con GitHub' /tmp/admin.html
+
+          check_200 "$BASE/styles.css" /tmp/styles.css
+          grep -Fq '.auth-card' /tmp/styles.css
+
+          check_200 "$BASE/app.js" /tmp/app.js
+          grep -Fq 'loadDashboard' /tmp/app.js
+
+          check_200 "$BASE/github-auth.js" /tmp/github-auth.js
+          grep -Fq 'signInWithOAuth' /tmp/github-auth.js
+
+          check_200 "$BASE/config.js" /tmp/config.js
+          grep -Fq 'LICENSE_API_URL' /tmp/config.js
+
+          check_200 "$BASE/health" /tmp/health.json
+          grep -Fq '"ok":true' /tmp/health.json
+
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
 
