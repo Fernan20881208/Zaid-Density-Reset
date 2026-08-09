@@ -1,49 +1,76 @@
-const REV = "fb0bbc07a9f49d2643b05868928a95a46dbd857a";
-const ASSET_BASE = `https://cdn.jsdelivr.net/gh/Fernan20881208/Zaid-Density-Reset@${REV}/supabase/functions/density-reset-admin`;
+const BASE_PATH = "/functions/v1/density-reset-admin";
 
-const source = await fetch(`${ASSET_BASE}/index.html`, {
-  headers: { "Accept": "text/html" },
-});
-if (!source.ok) throw new Error(`admin html unavailable: ${source.status}`);
+const htmlSource = Deno.readTextFileSync(new URL("./index.html", import.meta.url));
+const styles = Deno.readTextFileSync(new URL("./styles.css", import.meta.url));
+const appJs = Deno.readTextFileSync(new URL("./app.js", import.meta.url));
+const githubAuthJs = Deno.readTextFileSync(new URL("./github-auth.js", import.meta.url));
+const configJs = Deno.readTextFileSync(new URL("./config.js", import.meta.url));
 
-const HTML = (await source.text())
-  .replace('href="./styles.css"', `href="${ASSET_BASE}/styles.css"`)
-  .replace('src="./github-auth.js"', `src="${ASSET_BASE}/github-auth.js"`)
-  .replace('src="./app.js"', `src="${ASSET_BASE}/app.js"`);
+const html = htmlSource
+  .replace('href="./styles.css"', `href="${BASE_PATH}/styles.css"`)
+  .replace('src="./github-auth.js"', `src="${BASE_PATH}/github-auth.js"`)
+  .replace('src="./app.js"', `src="${BASE_PATH}/app.js"`);
 
-const HTML_BLOB = new Blob([HTML], { type: "text/html;charset=utf-8" });
+const commonHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "Pragma": "no-cache",
+  "Expires": "0",
+  "Referrer-Policy": "no-referrer",
+};
+
+function assetResponse(
+  body: string,
+  contentType: string,
+  requestMethod: string,
+): Response {
+  return new Response(requestMethod === "HEAD" ? null : body, {
+    status: 200,
+    headers: {
+      ...commonHeaders,
+      "Content-Type": contentType,
+    },
+  });
+}
 
 Deno.serve((request) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const url = new URL(request.url);
-  if (url.pathname.endsWith("/health")) {
+  const { pathname } = new URL(request.url);
+  const suffix = pathname.startsWith(BASE_PATH)
+    ? pathname.slice(BASE_PATH.length)
+    : pathname;
+
+  if (suffix === "/health") {
     return Response.json(
-      { ok: true, service: "density-reset-admin", version: 13 },
+      { ok: true, service: "density-reset-admin", version: 14 },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  const headers = new Headers();
-  headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  headers.set("Pragma", "no-cache");
-  headers.set("Expires", "0");
-  headers.set("Content-Disposition", "inline");
-  headers.set("Referrer-Policy", "no-referrer");
-  headers.set(
-    "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://esm.sh; style-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-  );
-
-  if (request.method === "HEAD") {
-    headers.set("Content-Type", "text/html; charset=utf-8");
-    return new Response(null, { status: 200, headers });
+  if (suffix === "" || suffix === "/") {
+    const response = assetResponse(html, "text/html; charset=utf-8", request.method);
+    response.headers.set(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' https://esm.sh; style-src 'self'; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    );
+    return response;
   }
 
-  return new Response(HTML_BLOB, {
-    status: 200,
-    headers,
-  });
+  switch (suffix) {
+    case "/styles.css":
+      return assetResponse(styles, "text/css; charset=utf-8", request.method);
+    case "/app.js":
+      return assetResponse(appJs, "text/javascript; charset=utf-8", request.method);
+    case "/github-auth.js":
+      return assetResponse(githubAuthJs, "text/javascript; charset=utf-8", request.method);
+    case "/config.js":
+      return assetResponse(configJs, "text/javascript; charset=utf-8", request.method);
+    default:
+      return new Response("Not found", {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+  }
 });
