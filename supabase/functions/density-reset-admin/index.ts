@@ -11,6 +11,8 @@ const HTML = (await source.text())
   .replace('src="./github-auth.js"', `src="${ASSET_BASE}/github-auth.js"`)
   .replace('src="./app.js"', `src="${ASSET_BASE}/app.js"`);
 
+const HTML_BLOB = new Blob([HTML], { type: "text/html;charset=utf-8" });
+
 Deno.serve((request) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405 });
@@ -19,21 +21,29 @@ Deno.serve((request) => {
   const url = new URL(request.url);
   if (url.pathname.endsWith("/health")) {
     return Response.json(
-      { ok: true, service: "density-reset-admin", version: 12 },
+      { ok: true, service: "density-reset-admin", version: 13 },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  return new Response(request.method === "HEAD" ? null : HTML, {
+  const headers = new Headers();
+  headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  headers.set("Pragma", "no-cache");
+  headers.set("Expires", "0");
+  headers.set("Content-Disposition", "inline");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://esm.sh; style-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  );
+
+  if (request.method === "HEAD") {
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    return new Response(null, { status: 200, headers });
+  }
+
+  return new Response(HTML_BLOB, {
     status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=UTF-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      "Pragma": "no-cache",
-      "Expires": "0",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://esm.sh; style-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-    },
+    headers,
   });
 });
