@@ -1,15 +1,5 @@
 const BASE_PATH = "/functions/v1/density-reset-admin";
-
-const htmlSource = Deno.readTextFileSync(new URL("./index.html", import.meta.url));
-const styles = Deno.readTextFileSync(new URL("./styles.css", import.meta.url));
-const appJs = Deno.readTextFileSync(new URL("./app.js", import.meta.url));
-const githubAuthJs = Deno.readTextFileSync(new URL("./github-auth.js", import.meta.url));
-const configJs = Deno.readTextFileSync(new URL("./config.js", import.meta.url));
-
-const html = htmlSource
-  .replace('href="./styles.css"', `href="${BASE_PATH}/styles.css"`)
-  .replace('src="./github-auth.js"', `src="${BASE_PATH}/github-auth.js"`)
-  .replace('src="./app.js"', `src="${BASE_PATH}/app.js"`);
+const RAW_BASE = "https://raw.githubusercontent.com/Fernan20881208/Zaid-Density-Reset/main/supabase/functions/density-reset-admin";
 
 const commonHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -17,6 +7,17 @@ const commonHeaders = {
   "Expires": "0",
   "Referrer-Policy": "no-referrer",
 };
+
+async function loadAsset(name: string): Promise<string> {
+  const response = await fetch(`${RAW_BASE}/${name}`, {
+    headers: { "Accept": "text/plain,*/*" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Unable to load ${name}: ${response.status}`);
+  }
+  return await response.text();
+}
 
 function assetResponse(
   body: string,
@@ -32,7 +33,7 @@ function assetResponse(
   });
 }
 
-Deno.serve((request) => {
+Deno.serve(async (request) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405 });
   }
@@ -44,33 +45,62 @@ Deno.serve((request) => {
 
   if (suffix === "/health") {
     return Response.json(
-      { ok: true, service: "density-reset-admin", version: 14 },
+      { ok: true, service: "density-reset-admin", version: 16 },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  if (suffix === "" || suffix === "/") {
-    const response = assetResponse(html, "text/html; charset=utf-8", request.method);
-    response.headers.set(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' https://esm.sh; style-src 'self'; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-    );
-    return response;
-  }
+  try {
+    if (suffix === "" || suffix === "/") {
+      const source = await loadAsset("index.html");
+      const html = source
+        .replace('href="./styles.css"', `href="${BASE_PATH}/styles.css"`)
+        .replace('src="./github-auth.js"', `src="${BASE_PATH}/github-auth.js"`)
+        .replace('src="./app.js"', `src="${BASE_PATH}/app.js"`);
 
-  switch (suffix) {
-    case "/styles.css":
-      return assetResponse(styles, "text/css; charset=utf-8", request.method);
-    case "/app.js":
-      return assetResponse(appJs, "text/javascript; charset=utf-8", request.method);
-    case "/github-auth.js":
-      return assetResponse(githubAuthJs, "text/javascript; charset=utf-8", request.method);
-    case "/config.js":
-      return assetResponse(configJs, "text/javascript; charset=utf-8", request.method);
-    default:
+      const response = assetResponse(
+        html,
+        "text/html; charset=utf-8",
+        request.method,
+      );
+      response.headers.set(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' https://esm.sh; style-src 'self'; connect-src 'self' https://zzlvupunploglgxbgllm.supabase.co https://esm.sh; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      );
+      return response;
+    }
+
+    const assets: Record<string, [string, string]> = {
+      "/styles.css": ["styles.css", "text/css; charset=utf-8"],
+      "/app.js": ["app.js", "text/javascript; charset=utf-8"],
+      "/github-auth.js": ["github-auth.js", "text/javascript; charset=utf-8"],
+      "/config.js": ["config.js", "text/javascript; charset=utf-8"],
+    };
+
+    const asset = assets[suffix];
+    if (!asset) {
       return new Response("Not found", {
         status: 404,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
+    }
+
+    const body = await loadAsset(asset[0]);
+    return assetResponse(body, asset[1], request.method);
+  } catch (error) {
+    console.error(
+      "density-reset-admin asset error",
+      error instanceof Error ? error.message : "unknown",
+    );
+    return new Response(
+      "Density Reset Admin no pudo cargar sus recursos. Intenta nuevamente en unos segundos.",
+      {
+        status: 503,
+        headers: {
+          ...commonHeaders,
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      },
+    );
   }
 });
