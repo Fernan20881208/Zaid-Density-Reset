@@ -47,7 +47,7 @@ jobs:
             local url="$1"
             local out="$2"
             local status
-            status="$(curl --retry 3 --retry-delay 2 -sS -o "$out" -w '%{http_code}' "$url")"
+            status="$(curl -L --retry 3 --retry-delay 2 -sS -o "$out" -w '%{http_code}' "$url")"
             test "$status" = "200" || { echo "HTTP $status en $url"; cat "$out" || true; exit 1; }
           }
 
