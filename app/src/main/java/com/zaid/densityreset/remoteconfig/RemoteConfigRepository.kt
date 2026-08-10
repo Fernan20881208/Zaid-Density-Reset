@@ -236,4 +236,8 @@ private val Context.remoteConfigDataStore by preferencesDataStore(
 )
 
 private fun JSONObject.optNullableString(name: String): String? =
-    if (isNull(name)) null else optString(name, null)?.trim()?.takeIf { it.isNotEmpty() }
+    if (!has(name) || isNull(name)) {
+        null
+    } else {
+        optString(name).trim().takeIf { it.isNotEmpty() }
+    }
