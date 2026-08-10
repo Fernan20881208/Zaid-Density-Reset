@@ -17,12 +17,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.zaid.densityreset.MainActivity
 import com.zaid.densityreset.R
 import com.zaid.densityreset.databinding.ActivityLicenseGateBinding
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.domain.LicenseState
 import com.zaid.densityreset.license.util.LicenseKeyFormatter
+import com.zaid.densityreset.startup.StartupActivity
+import com.zaid.densityreset.startup.StartupCoordinator
 import com.zaid.densityreset.util.ImageAssets
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -218,7 +219,13 @@ class LicenseGateActivity : AppCompatActivity() {
         binding.licenseKeyInput.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         lifecycleScope.launch {
             delay(450L)
-            startActivity(Intent(this@LicenseGateActivity, MainActivity::class.java))
+            StartupCoordinator.resetForRecheck()
+            startActivity(
+                Intent(this@LicenseGateActivity, StartupActivity::class.java).apply {
+                    action = StartupActivity.ACTION_OPEN_GAME_LAUNCHER
+                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+            )
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }
