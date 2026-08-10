@@ -14,7 +14,7 @@ This matrix distinguishes automated/static validation from Android device valida
 | Disabled game remotely | Game remains visible and reports temporary unavailability | Backend + device |
 | Disabled DPI profile remotely | Profile remains visible and reports temporary unavailability | Backend + device |
 | Remote density values | Valid values replace fallback; invalid values revert to 20/72/280 | Unit test |
-| Remote session duration | New sessions use validated 5–300 second duration and persist restoreAt | Unit/static + device |
+| Remote session duration | New sessions use validated 5–150 second duration and persist restoreAt | Unit/static + device |
 | Remote announcement | Liquid Glass announcement card appears only when enabled | Device |
 | Remote Config available | Live config replaces cache and persists locally | Backend + device |
 | Remote Config unavailable | Cached noncritical config can render; security startup gate follows verified fallback rules | Device/network fault |
