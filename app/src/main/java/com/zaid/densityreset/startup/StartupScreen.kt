@@ -2,7 +2,6 @@ package com.zaid.densityreset.startup
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -42,11 +41,7 @@ fun StartupScreen(
             .background(background),
         contentAlignment = Alignment.Center
     ) {
-        AnimatedContent(
-            targetState = gate,
-            transitionSpec = { androidx.compose.animation.fadeIn(tween(180)) togetherWith androidx.compose.animation.fadeOut(tween(120)) },
-            label = "startup-gate"
-        ) { current ->
+        AnimatedContent(targetState = gate, label = "startup-gate") { current ->
             when (current) {
                 StartupGate.Checking -> GateCard {
                     CircularProgressIndicator(color = Color(0xFF9DEAF4))
@@ -89,10 +84,7 @@ fun StartupScreen(
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = current.message,
-                        color = Color(0xFFFFBBB4)
-                    )
+                    Text(text = current.message, color = Color(0xFFFFBBB4))
                     RetryButton(onRetry)
                 }
 
