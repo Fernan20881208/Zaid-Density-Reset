@@ -14,7 +14,6 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.zaid.densityreset.MainActivity
 import com.zaid.densityreset.R
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.density.ShizukuDensityController
@@ -25,7 +24,9 @@ import com.zaid.densityreset.gameprofile.domain.GameSessionState
 import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
+import com.zaid.densityreset.remoteconfig.RemoteConfigManager
 import com.zaid.densityreset.shizuku.ShizukuManager
+import com.zaid.densityreset.startup.StartupActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -255,7 +256,10 @@ class DpiGameSessionService : Service() {
         }
 
         delay(GAME_LAUNCH_CONFIRMATION_MILLIS)
-        val restoreAt = System.currentTimeMillis() + SESSION_DURATION_MILLIS
+        val durationSeconds = RemoteConfigManager.currentConfig()
+            .gameSessionDurationSeconds
+            .coerceIn(5, 300)
+        val restoreAt = System.currentTimeMillis() + durationSeconds * 1_000L
         repository.markSessionActive(restoreAt)
         startCountdown()
     }
@@ -406,6 +410,18 @@ class DpiGameSessionService : Service() {
         ).toInt()
     }
 
+    private fun sessionDurationSeconds(session: GameSessionState): Int {
+        val startedAt = session.sessionStartedAt ?: return RemoteConfigManager.currentConfig()
+            .gameSessionDurationSeconds
+            .coerceIn(5, 300)
+        val restoreAt = session.restoreAt ?: return RemoteConfigManager.currentConfig()
+            .gameSessionDurationSeconds
+            .coerceIn(5, 300)
+        return ceil((restoreAt - startedAt).coerceAtLeast(1L) / 1_000.0)
+            .toInt()
+            .coerceIn(1, 300)
+    }
+
     private fun updateNotification(
         session: GameSessionState,
         seconds: Int?
@@ -422,7 +438,14 @@ class DpiGameSessionService : Service() {
             )
             return
         }
-        updateNotification(game, preset, session.currentStep, seconds, session.errorMessage)
+        updateNotification(
+            game,
+            preset,
+            session.currentStep,
+            seconds,
+            session.errorMessage,
+            sessionDurationSeconds(session)
+        )
     }
 
     private fun updateNotification(
@@ -430,7 +453,10 @@ class DpiGameSessionService : Service() {
         preset: DensityPreset,
         step: SessionStep,
         seconds: Int?,
-        errorMessage: String? = null
+        errorMessage: String? = null,
+        durationSeconds: Int = RemoteConfigManager.currentConfig()
+            .gameSessionDurationSeconds
+            .coerceIn(5, 300)
     ) {
         val title = when (step) {
             SessionStep.SESSION_ACTIVE -> getString(R.string.game_session_active)
@@ -463,7 +489,7 @@ class DpiGameSessionService : Service() {
             )
 
         if (step == SessionStep.SESSION_ACTIVE && seconds != null) {
-            builder.setProgress(SESSION_DURATION_SECONDS, seconds, false)
+            builder.setProgress(durationSeconds, seconds.coerceIn(0, durationSeconds), false)
         }
         notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
@@ -511,7 +537,8 @@ class DpiGameSessionService : Service() {
     private fun openAppPendingIntent(): PendingIntent = PendingIntent.getActivity(
         this,
         REQUEST_OPEN_APP,
-        Intent(this, MainActivity::class.java).apply {
+        Intent(this, StartupActivity::class.java).apply {
+            action = StartupActivity.ACTION_OPEN_GAME_LAUNCHER
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -575,8 +602,6 @@ class DpiGameSessionService : Service() {
         private const val REQUEST_OPEN_APP = 4103
         private const val REQUEST_RESTORE = 4104
 
-        private const val SESSION_DURATION_MILLIS = 30_000L
-        private const val SESSION_DURATION_SECONDS = 30
         private const val COUNTDOWN_UPDATE_MILLIS = 1_000L
         private const val DENSITY_SETTLE_MILLIS = 500L
         private const val GAME_LAUNCH_CONFIRMATION_MILLIS = 1_500L
