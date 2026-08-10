@@ -29,6 +29,15 @@ class RemoteAppConfigTest {
     }
 
     @Test
+    fun sessionDurationAboveShortServiceSafetyBudgetFallsBack() {
+        val invalid = RemoteAppConfig.DEFAULT.copy(
+            gameSessionDurationSeconds = RemoteAppConfig.MAX_SESSION_SECONDS + 1
+        ).validated()
+
+        assertEquals(30, invalid.gameSessionDurationSeconds)
+    }
+
+    @Test
     fun validRemoteValuesArePreserved() {
         val valid = RemoteAppConfig.DEFAULT.copy(
             maintenanceMode = true,
