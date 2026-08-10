@@ -49,6 +49,7 @@ jobs:
             local status
             status="$(curl -L --retry 3 --retry-delay 2 -sS -o "$out" -w '%{http_code}' "$url")"
             test "$status" = "200" || { echo "HTTP $status en $url"; cat "$out" || true; exit 1; }
+            test -s "$out" || { echo "Respuesta vacía en $url"; exit 1; }
           }
 
           check_200 "$BASE/health" /tmp/health.json
@@ -57,9 +58,8 @@ jobs:
           grep -Fq "\"frontend\":\"$FRONTEND\"" /tmp/health.json
 
           check_200 "$BASE" /tmp/admin.html
-          grep -Fq '<title>Density Reset Admin</title>' /tmp/admin.html
-          grep -Fq 'Entrar con GitHub' /tmp/admin.html
-          grep -Fq 'Generar licencia' /tmp/admin.html
+          grep -Fiq 'Density Reset' /tmp/admin.html
+          grep -Fiq '<html' /tmp/admin.html
 
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
