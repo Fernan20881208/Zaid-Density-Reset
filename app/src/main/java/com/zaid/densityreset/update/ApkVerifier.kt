@@ -3,6 +3,7 @@ package com.zaid.densityreset.update
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
 import com.zaid.densityreset.BuildConfig
@@ -83,7 +84,11 @@ class ApkVerifier(context: Context) {
 
     @Suppress("DEPRECATION")
     private fun archivePackageInfo(file: File): PackageInfo? {
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.getPackageArchiveInfo(
                 file.absolutePath,
@@ -96,7 +101,11 @@ class ApkVerifier(context: Context) {
 
     @Suppress("DEPRECATION")
     private fun installedPackageInfo(): PackageInfo {
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.getPackageInfo(
                 BuildConfig.APPLICATION_ID,
@@ -107,10 +116,20 @@ class ApkVerifier(context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun hasCompatibleSigner(installed: PackageInfo, archive: PackageInfo): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            val installedDigests = installed.signatures.orEmpty()
+                .map(::certificateDigest)
+                .toSet()
+            val archiveDigests = archive.signatures.orEmpty()
+                .map(::certificateDigest)
+                .toSet()
+            return archiveDigests.isNotEmpty() && archiveDigests == installedDigests
+        }
+
         val installedInfo = installed.signingInfo ?: return false
         val archiveInfo = archive.signingInfo ?: return false
-
         val installedHistory = installedInfo.signingCertificateHistory
             .map(::certificateDigest)
             .toSet()
@@ -122,7 +141,7 @@ class ApkVerifier(context: Context) {
             archiveCurrentSigners.all { it in installedHistory }
     }
 
-    private fun certificateDigest(signature: android.content.pm.Signature): String =
+    private fun certificateDigest(signature: Signature): String =
         MessageDigest.getInstance("SHA-256")
             .digest(signature.toByteArray())
             .joinToString("") { "%02x".format(it) }
