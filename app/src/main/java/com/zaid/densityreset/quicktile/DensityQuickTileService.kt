@@ -1,5 +1,6 @@
 package com.zaid.densityreset.quicktile
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
@@ -163,6 +164,7 @@ class DensityQuickTileService : TileService() {
         }
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     @Suppress("DEPRECATION")
     private fun openStartup(action: String) {
         val intent = Intent(this, StartupActivity::class.java).apply {
