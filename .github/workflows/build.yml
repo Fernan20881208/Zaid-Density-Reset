@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -81,27 +81,24 @@ jobs:
       - name: Ejecutar lint, pruebas y compilación debug
         run: ./gradlew clean lintDebug testDebugUnitTest assembleDebug
 
-      - name: Preparar nombre de distribución
-        run: cp app/build/outputs/apk/debug/app-debug.apk DensityReset-Zaid-v1.4.0.apk
+      - name: Leer versión
+        id: version
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          from pathlib import Path
+          text = Path("app/build.gradle.kts").read_text()
+          print("name=" + re.search(r'versionName\s*=\s*"([^"]+)"', text).group(1))
+          PY
 
-      - name: Subir APK
+      - name: Preparar nombre de distribución debug
+        run: cp app/build/outputs/apk/debug/app-debug.apk "DensityReset-Zaid-v${{ steps.version.outputs.name }}-debug.apk"
+
+      - name: Subir APK debug
         uses: actions/upload-artifact@v4
         with:
-          name: DensityReset-Zaid-v1.4.0-apk
-          path: DensityReset-Zaid-v1.4.0.apk
+          name: DensityReset-Zaid-v${{ steps.version.outputs.name }}-debug-apk
+          path: DensityReset-Zaid-v${{ steps.version.outputs.name }}-debug.apk
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publicar Release 1.4.0
-        if: >-
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main' &&
-          contains(github.event.head_commit.message, 'release: Density Reset 1.4.0')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create v1.4.0
-          DensityReset-Zaid-v1.4.0.apk#DensityReset-Zaid-v1.4.0.apk
-          --target "$GITHUB_SHA"
-          --title "Density Reset 1.4.0 — licencias y panel admin"
-          --notes-file RELEASE_NOTES_1.4.0.md
