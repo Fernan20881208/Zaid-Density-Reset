@@ -47,7 +47,7 @@ data class RemoteAppConfig(
         const val MIN_DENSITY = 20
         const val MAX_DENSITY = 1_000
         const val MIN_SESSION_SECONDS = 5
-        const val MAX_SESSION_SECONDS = 300
+        const val MAX_SESSION_SECONDS = 150
 
         private const val MAX_MESSAGE_LENGTH = 1_000
         private const val MAX_TITLE_LENGTH = 120
