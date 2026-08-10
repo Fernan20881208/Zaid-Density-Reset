@@ -34,14 +34,20 @@ object RemoteConfigManager {
         repository = RemoteConfigRepositoryImpl(app.applicationContext)
         initialized = true
         scope.launch {
-            val cached = repository.cachedSnapshot()
-            hasValidCache = cached.hasValidCache
-            lastSuccessAt = cached.lastSuccessAt
-            _config.value = cached.config
+            loadCachedSnapshot()
             repository.observeConfig().collect { value ->
                 _config.value = value
             }
         }
+    }
+
+    suspend fun loadCachedSnapshot(): RemoteConfigCache {
+        check(initialized) { "RemoteConfigManager is not initialized." }
+        val cached = repository.cachedSnapshot()
+        hasValidCache = cached.hasValidCache
+        lastSuccessAt = cached.lastSuccessAt
+        _config.value = cached.config
+        return cached
     }
 
     suspend fun refresh(): Result<RemoteAppConfig> {
