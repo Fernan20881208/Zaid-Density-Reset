@@ -5,6 +5,7 @@ import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.ui.LicenseUiBinder
 import com.zaid.densityreset.remoteconfig.RemoteConfigManager
 import com.zaid.densityreset.shizuku.ShizukuManager
+import com.zaid.densityreset.startup.StartupActivityGuard
 import com.zaid.densityreset.startup.StartupCoordinator
 import com.zaid.densityreset.update.UpdateManager
 
@@ -16,6 +17,7 @@ class DensityResetApplication : Application() {
         UpdateManager.initialize(this)
         LicenseManager.initialize(this)
         StartupCoordinator.initialize(this)
+        StartupActivityGuard.register(this)
         LicenseUiBinder.register(this)
     }
 }
