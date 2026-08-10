@@ -101,7 +101,7 @@ function sanitizePatch(input: Record<string, unknown>): Record<string, unknown> 
   copyInteger(input, result, "sensi_ultra_density", 20, 1000);
   copyInteger(input, result, "sensi_high_density", 20, 1000);
   copyInteger(input, result, "sensi_low_density", 20, 1000);
-  copyInteger(input, result, "game_session_duration_seconds", 5, 300);
+  copyInteger(input, result, "game_session_duration_seconds", 5, 150);
   copyBoolean(input, result, "announcement_enabled");
   copyText(input, result, "announcement_title", 120, true);
   copyText(input, result, "announcement_message", 2000, true);
