@@ -37,7 +37,8 @@ class RemoteConfigRepositoryImpl(context: Context) : RemoteConfigRepository {
 
     override suspend fun refresh(): Result<RemoteAppConfig> = withContext(Dispatchers.IO) {
         runCatching {
-            val endpoint = "${BuildConfig.LICENSE_API_URL.trimEnd('/')}/app-config"
+            val endpoint = BuildConfig.LICENSE_API_URL
+                .replace(Regex("/license-api/?$"), "/app-config")
             require(endpoint.startsWith("https://")) { "Remote Config requiere HTTPS." }
 
             val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
