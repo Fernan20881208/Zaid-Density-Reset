@@ -66,9 +66,9 @@ object StartupCoordinator {
                 null
             }
 
-            val cachedBlock = updateRequiredByRemote(currentVersion, cached.config)
+            val cachedBlock = requiredVersionCode(currentVersion, cached.config)
             val liveBlock = liveRemoteConfig?.let {
-                updateRequiredByRemote(currentVersion, it)
+                requiredVersionCode(currentVersion, it)
             }
             val effectiveRemoteBlock = if (liveRemoteConfig != null) {
                 liveBlock
@@ -185,24 +185,6 @@ object StartupCoordinator {
             sessionRepository.state.first { state -> !state.sessionActive }
             true
         } ?: false
-    }
-
-    private fun updateRequiredByRemote(
-        currentVersion: Long,
-        config: RemoteAppConfig
-    ): Long? {
-        val blocked = currentVersion in config.blockedVersionCodes
-        val minBlocked = currentVersion < config.minSupportedVersionCode
-        val latestBlocked = config.latestVersionCode?.let { currentVersion < it } ?: false
-        val forceBlocked = config.forceUpdate && latestBlocked
-
-        if (!blocked && !minBlocked && !latestBlocked && !forceBlocked) return null
-        val next = currentVersion + 1L
-        return listOfNotNull(
-            config.latestVersionCode,
-            config.minSupportedVersionCode.takeIf { it > currentVersion },
-            next.takeIf { blocked }
-        ).maxOrNull() ?: next
     }
 
     private fun syntheticRelease(
