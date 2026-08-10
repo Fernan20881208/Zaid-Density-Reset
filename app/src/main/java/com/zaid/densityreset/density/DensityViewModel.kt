@@ -69,6 +69,10 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun applyPreset(preset: DensityPreset) {
+        if (!preset.enabled) {
+            _events.tryEmit("${preset.displayName} está temporalmente no disponible.")
+            return
+        }
         viewModelScope.launch {
             operationMutex.withLock {
                 _uiState.value = _uiState.value.copy(
