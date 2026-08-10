@@ -3,6 +3,7 @@ package com.zaid.densityreset
 import android.app.Application
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.ui.LicenseUiBinder
+import com.zaid.densityreset.quicktile.DensityTileStateObserver
 import com.zaid.densityreset.remoteconfig.RemoteConfigManager
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.startup.StartupActivityGuard
@@ -18,6 +19,7 @@ class DensityResetApplication : Application() {
         LicenseManager.initialize(this)
         StartupCoordinator.initialize(this)
         StartupActivityGuard.register(this)
+        DensityTileStateObserver.initialize(this)
         LicenseUiBinder.register(this)
     }
 }
