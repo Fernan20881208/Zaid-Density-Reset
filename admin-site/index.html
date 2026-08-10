@@ -5,26 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#08111f">
 <meta name="color-scheme" content="dark">
-<title>Density Reset Admin</title>
+<title>Density Reset · License Center</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 <div class="ambient a"></div><div class="ambient b"></div>
 <main class="shell">
-<section id="login" class="login-wrap">
-  <article class="glass login-card">
-    <div class="brand"><div class="mark">DR</div><div><p class="eyebrow">DENSITY RESET</p><h2>Panel de Keys</h2></div></div>
-    <p class="lead">Administra licencias, dispositivos y accesos desde un solo lugar.</p>
-    <form id="loginForm" class="stack">
-      <label><span>Correo</span><input id="email" type="email" autocomplete="username" placeholder="admin@densityreset.app" required></label>
-      <label><span>Contraseña</span><input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label>
-      <button id="loginButton" class="primary full" type="submit">Entrar</button>
-      <button id="githubLogin" class="ghost full" type="button">Entrar con GitHub</button>
-      <p id="loginError" class="auth-error" hidden></p>
-      <p class="tiny">Acceso privado mediante Supabase Auth.</p>
-    </form>
-  </article>
-</section>
+<section id="boot" class="login-wrap"><article class="glass login-card"><div class="brand"><div class="mark">DR</div><div><p class="eyebrow">DENSITY RESET</p><h2>Comprobando acceso…</h2></div></div><p class="lead">Validando tu sesión de administrador.</p></article></section>
 <section id="dash" hidden>
   <header class="glass topbar">
     <div class="topbrand"><div class="mark small">DR</div><div><p class="eyebrow">DENSITY RESET</p><h2>License Center</h2><div id="adminIdentity" class="identity"></div></div></div>
@@ -48,6 +35,7 @@
         <label class="span2"><span>Etiqueta</span><input id="label" maxlength="120" placeholder="Cliente / TikTok / Venta"></label>
         <button id="generateButton" class="primary span2" type="submit">Generar key</button>
       </form>
+      <p id="generatorError" class="auth-error" hidden></p>
       <div id="generated" class="generated" hidden><div class="gen-head"><span>Keys recién generadas</span><button class="ghost" id="copy" type="button">Copiar</button></div><pre id="keyOutput"></pre><p class="tiny">La key completa solo se muestra una vez. Guárdala antes de cerrar esta sección.</p></div>
     </article>
     <article class="glass panel activity-panel"><div class="panel-head"><div><p class="eyebrow">ACTIVIDAD</p><h3>Últimos movimientos</h3></div><span class="online">En línea</span></div><div class="activity" id="activity"></div></article>
