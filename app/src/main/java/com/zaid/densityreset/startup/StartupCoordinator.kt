@@ -70,6 +70,11 @@ object StartupCoordinator {
             val liveBlock = liveRemoteConfig?.let {
                 updateRequiredByRemote(currentVersion, it)
             }
+            val effectiveRemoteBlock = if (liveRemoteConfig != null) {
+                liveBlock
+            } else {
+                cachedBlock
+            }
 
             when (githubResult) {
                 is UpdateResult.Available -> {
@@ -78,11 +83,10 @@ object StartupCoordinator {
 
                 is UpdateResult.UpToDate -> {
                     val knownRelease = githubResult.latest
-                    val requiredCode = liveBlock ?: cachedBlock
-                    if (requiredCode != null) {
+                    if (effectiveRemoteBlock != null) {
                         val release = knownRelease
                             ?.takeIf { it.versionCode > currentVersion }
-                            ?: syntheticRelease(requiredCode, effectiveConfig)
+                            ?: syntheticRelease(effectiveRemoteBlock, effectiveConfig)
                         return@withLock setGate(StartupGate.UpdateRequired(release))
                     }
                 }
@@ -90,11 +94,10 @@ object StartupCoordinator {
                 is UpdateResult.Failure -> {
                     if (liveRemoteConfig != null) {
                         val latest = liveRemoteConfig.latestVersionCode
-                        val requiredCode = liveBlock
-                        if (requiredCode != null) {
+                        if (liveBlock != null) {
                             return@withLock setGate(
                                 StartupGate.UpdateRequired(
-                                    syntheticRelease(requiredCode, liveRemoteConfig)
+                                    syntheticRelease(liveBlock, liveRemoteConfig)
                                 )
                             )
                         }
@@ -124,11 +127,10 @@ object StartupCoordinator {
                 }
 
                 null -> {
-                    val requiredCode = liveBlock ?: cachedBlock
-                    if (requiredCode != null) {
+                    if (effectiveRemoteBlock != null) {
                         return@withLock setGate(
                             StartupGate.UpdateRequired(
-                                syntheticRelease(requiredCode, effectiveConfig)
+                                syntheticRelease(effectiveRemoteBlock, effectiveConfig)
                             )
                         )
                     }
@@ -192,8 +194,7 @@ object StartupCoordinator {
         val blocked = currentVersion in config.blockedVersionCodes
         val minBlocked = currentVersion < config.minSupportedVersionCode
         val latestBlocked = config.latestVersionCode?.let { currentVersion < it } ?: false
-        val forceBlocked = config.forceUpdate &&
-            config.latestVersionCode?.let { currentVersion < it } == true
+        val forceBlocked = config.forceUpdate && latestBlocked
 
         if (!blocked && !minBlocked && !latestBlocked && !forceBlocked) return null
         val next = currentVersion + 1L
