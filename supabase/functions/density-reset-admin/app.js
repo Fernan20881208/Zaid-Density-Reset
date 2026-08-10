@@ -1,228 +1,237 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { config } from "./config.js";
 
-const { config } = await import("./config.js");
 const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
 const $ = (id) => document.getElementById(id);
-const loginView = $("loginView");
-const adminView = $("adminView");
-const loginForm = $("loginForm");
-const loginError = $("loginError");
-const generatorForm = $("generatorForm");
-const generationResult = $("generationResult");
-const generatedKeysView = $("generatedKeys");
-const licensesBody = $("licensesBody");
-const detailsDialog = $("detailsDialog");
-let generatedLicenses = [];
+let licenses = [];
+let activeLicenseId = null;
 let searchTimer = null;
 
-loginForm.addEventListener("submit", async (event) => {
+$("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  hideMessage(loginError);
-  const email = $("email").value.trim();
-  const password = $("password").value;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) showMessage(loginError, "Correo o contraseña incorrectos, o usuario sin acceso.");
+  hideLoginError();
+  const button = $("loginButton");
+  setBusy(button, true, "Entrando…");
+  const { error } = await supabase.auth.signInWithPassword({
+    email: $("email").value.trim(),
+    password: $("password").value,
+  });
+  if (error) showLoginError("Correo o contraseña incorrectos, o usuario sin acceso.");
+  setBusy(button, false, "Entrar");
 });
 
-$("logoutAdmin").addEventListener("click", () => supabase.auth.signOut());
-
-$("duration").addEventListener("change", () => {
-  $("customDurationField").hidden = $("duration").value !== "custom";
-});
-
-generatorForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const quantity = Number($("quantity").value);
-  const selectedDuration = $("duration").value;
-  const durationDays = selectedDuration === "permanent"
-    ? null
-    : Number(selectedDuration === "custom" ? $("customDuration").value : selectedDuration);
-  const payload = {
-    quantity,
-    durationDays,
-    durationStartMode: $("durationStartMode").value,
-    maxDevices: Number($("maxDevices").value),
-    label: $("label").value.trim(),
-    notes: $("notes").value.trim(),
-  };
-  const button = $("generateButton");
-  button.disabled = true;
-  button.textContent = quantity === 1 ? "Generando…" : `Generando ${quantity}…`;
-  try {
-    const route = quantity === 1 ? "/admin/licenses/create" : "/admin/licenses/create-bulk";
-    const result = await api(route, { method: "POST", body: payload });
-    generatedLicenses = result.licenses ?? [];
-    generatedKeysView.textContent = generatedLicenses.map((license) => license.key).join("\n");
-    generationResult.hidden = false;
-    await loadAll();
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    button.disabled = false;
-    button.textContent = quantity === 1 ? "Generar" : `Generar ${quantity} keys`;
+$("githubLogin").addEventListener("click", async () => {
+  hideLoginError();
+  const button = $("githubLogin");
+  setBusy(button, true, "Abriendo GitHub…");
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "github",
+    options: { redirectTo, scopes: "read:user user:email" },
+  });
+  if (error) {
+    showLoginError("No fue posible iniciar sesión con GitHub.");
+    setBusy(button, false, "Entrar con GitHub");
   }
 });
 
-$("copyAll").addEventListener("click", async () => {
-  const text = generatedLicenses.map((item) => item.key).join("\n");
-  if (text) await navigator.clipboard.writeText(text);
+$("logout").addEventListener("click", () => supabase.auth.signOut());
+$("refresh").addEventListener("click", async () => {
+  try { await loadAll(); toast("Datos actualizados"); }
+  catch (error) { toast(error.message); }
 });
-
-$("exportCsv").addEventListener("click", () => {
-  if (!generatedLicenses.length) return;
-  const rows = [
-    ["key", "duration_days", "duration_start_mode", "max_devices", "label"],
-    ...generatedLicenses.map((item) => [
-      item.key,
-      item.duration_days ?? "permanent",
-      item.duration_start_mode,
-      item.max_devices,
-      item.label ?? "",
-    ]),
-  ];
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `density-reset-keys-${new Date().toISOString().slice(0, 10)}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-});
-
+$("newKey").addEventListener("click", () => $("generatorPanel").scrollIntoView({ behavior: "smooth", block: "start" }));
 $("search").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadLicenses, 250);
 });
-$("statusFilter").addEventListener("change", loadLicenses);
+$("filter").addEventListener("change", loadLicenses);
+$("close").addEventListener("click", () => $("modal").close());
 
-licensesBody.addEventListener("click", async (event) => {
+$("genForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const quantity = Math.max(1, Math.min(100, Number($("qty").value || 1)));
+  const selectedDuration = $("duration").value;
+  const durationDays = selectedDuration === "permanent" ? null : Number(selectedDuration);
+  const payload = {
+    quantity,
+    durationDays,
+    durationStartMode: $("start").value,
+    maxDevices: Math.max(1, Math.min(100, Number($("maxDevices").value || 1))),
+    label: $("label").value.trim(),
+    notes: "",
+  };
+  const button = $("generateButton");
+  setBusy(button, true, quantity === 1 ? "Generando…" : `Generando ${quantity}…`);
+  try {
+    const route = quantity === 1 ? "/admin/licenses/create" : "/admin/licenses/create-bulk";
+    const result = await api(route, { method: "POST", body: payload });
+    const created = result.licenses ?? [];
+    $("keyOutput").textContent = created.map((item) => item.key).join("\n");
+    $("generated").hidden = false;
+    toast(quantity === 1 ? "Key generada" : `${quantity} keys generadas`);
+    await loadAll();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(button, false, "Generar key");
+  }
+});
+
+$("copy").addEventListener("click", async () => {
+  const text = $("keyOutput").textContent.trim();
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast("Keys copiadas"); }
+  catch { toast("Mantén presionado para copiar"); }
+});
+
+$("cards").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const id = button.dataset.id;
   const action = button.dataset.action;
-  if (action === "details") return showDetails(id);
-
-  const confirmations = {
-    revoke: "¿Revocar esta licencia? El dispositivo perderá acceso en la próxima validación.",
-    disable: "¿Deshabilitar temporalmente esta licencia?",
-    enable: "¿Reactivar esta licencia? Se respetará su fecha de expiración original.",
-    "reset-device": "¿Resetear los dispositivos vinculados? La licencia podrá activarse en otro dispositivo.",
-    delete: "¿Eliminar esta licencia permanentemente? Esta acción no se puede deshacer.",
-  };
-  if (!confirm(confirmations[action] ?? "¿Confirmar esta acción?")) return;
-
-  try {
-    if (action === "delete") {
-      await api(`/admin/licenses/${id}`, { method: "DELETE" });
-    } else {
-      await api(`/admin/licenses/${action}`, { method: "POST", body: { id } });
-    }
-    await loadAll();
-  } catch (error) {
-    alert(error.message);
+  if (action === "details") return openDetails(id);
+  if (action === "toggle") {
+    const current = licenses.find((item) => item.id === id);
+    if (!current) return;
+    const nextAction = current.status === "disabled" ? "enable" : "disable";
+    await performAction(id, nextAction);
   }
+});
+
+$("modalActions").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button || !activeLicenseId) return;
+  const action = button.dataset.action;
+  if (action === "delete") {
+    if (!confirm("¿Eliminar esta licencia permanentemente? Esta acción no se puede deshacer.")) return;
+  } else if (action === "revoke") {
+    if (!confirm("¿Revocar esta licencia? El dispositivo perderá acceso en la próxima validación.")) return;
+  } else if (action === "reset-device") {
+    if (!confirm("¿Resetear los dispositivos vinculados? La key podrá usarse en otro dispositivo.")) return;
+  }
+  await performAction(activeLicenseId, action, true);
 });
 
 supabase.auth.onAuthStateChange(async (_event, session) => {
-  if (session) {
-    loginView.hidden = true;
-    adminView.hidden = false;
-    $("adminIdentity").textContent = session.user.email ?? "Administrador";
-    try {
-      await loadAll();
-    } catch (error) {
-      showMessage($("tableError"), error.message);
-    }
-  } else {
-    adminView.hidden = true;
-    loginView.hidden = false;
-    generatedLicenses = [];
-    generationResult.hidden = true;
-  }
+  if (session) await enterDashboard(session).catch(handleSessionError);
+  else showLogin();
 });
 
 const { data: initial } = await supabase.auth.getSession();
-if (initial.session) {
-  loginView.hidden = true;
-  adminView.hidden = false;
-  $("adminIdentity").textContent = initial.session.user.email ?? "Administrador";
-  await loadAll().catch((error) => showMessage($("tableError"), error.message));
+if (initial.session) await enterDashboard(initial.session).catch(handleSessionError);
+
+async function enterDashboard(session) {
+  $("login").hidden = true;
+  $("dash").hidden = false;
+  $("adminIdentity").textContent = session.user.email ?? "Administrador";
+  await loadAll();
+}
+
+function showLogin() {
+  $("dash").hidden = true;
+  $("login").hidden = false;
+  licenses = [];
+  activeLicenseId = null;
+  $("generated").hidden = true;
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLicenses()]);
+  document.body.classList.add("loading");
+  try {
+    await Promise.all([loadDashboard(), loadLicenses()]);
+    renderActivity();
+  } finally {
+    document.body.classList.remove("loading");
+  }
 }
 
 async function loadDashboard() {
   const result = await api("/admin/dashboard");
-  $("countActive").textContent = result.counts.active;
-  $("countUnused").textContent = result.counts.unused;
-  $("countExpired").textContent = result.counts.expired;
-  $("countRevoked").textContent = result.counts.revoked;
-  $("countDisabled").textContent = result.counts.disabled;
+  $("cActive").textContent = result.counts.active ?? 0;
+  $("cUnused").textContent = result.counts.unused ?? 0;
+  $("cExpired").textContent = result.counts.expired ?? 0;
+  $("cBlocked").textContent = (result.counts.disabled ?? 0) + (result.counts.revoked ?? 0);
 }
 
 async function loadLicenses() {
-  hideMessage($("tableError"));
   const params = new URLSearchParams({
     search: $("search").value.trim(),
-    status: $("statusFilter").value,
+    status: $("filter").value,
     limit: "100",
     offset: "0",
   });
   const result = await api(`/admin/licenses?${params}`);
-  $("licenseTotal").textContent = `${result.total} resultados`;
-  licensesBody.replaceChildren(...result.licenses.map(renderLicenseRow));
+  licenses = result.licenses ?? [];
+  renderRows();
+  renderActivity();
 }
 
-function renderLicenseRow(license) {
-  const row = document.createElement("tr");
-  const duration = license.durationDays == null
-    ? "Permanente"
-    : `${license.durationDays} días · ${license.durationStartMode === "generation" ? "desde generación" : "desde activación"}`;
-  row.innerHTML = `
-    <td><code>${escapeHtml(license.key)}</code></td>
-    <td><span class="badge ${escapeHtml(license.status)}">${statusLabel(license.status)}</span></td>
-    <td>${escapeHtml(duration)}</td>
-    <td>${formatDate(license.createdAt)}</td>
-    <td>${formatDate(license.activatedAt)}</td>
-    <td>${license.expiresAt ? formatDate(license.expiresAt) : "Permanente"}</td>
-    <td>${escapeHtml((license.devices ?? []).join(", ") || "Sin vincular")}</td>
-    <td>${formatDate(license.lastValidation)}</td>
-    <td><div class="row-actions">
-      <button data-action="details" data-id="${license.id}">Detalles</button>
-      <button class="secondary" data-action="disable" data-id="${license.id}">Deshabilitar</button>
-      <button class="secondary" data-action="enable" data-id="${license.id}">Reactivar</button>
-      <button class="secondary" data-action="reset-device" data-id="${license.id}">Reset dispositivo</button>
-      <button class="danger" data-action="revoke" data-id="${license.id}">Revocar</button>
-      <button class="danger" data-action="delete" data-id="${license.id}">Eliminar</button>
-    </div></td>`;
-  return row;
+function renderRows() {
+  $("empty").hidden = licenses.length !== 0;
+  $("cards").innerHTML = licenses.map((item) => `
+    <article class="row">
+      <div><span class="ml">Key</span><div class="key">${esc(item.key)}</div><div class="mv">${esc(item.label || "Sin etiqueta")}</div></div>
+      <div><span class="ml">Estado</span><span class="badge ${esc(item.status)}">${statusLabel(item.status)}</span></div>
+      <div class="mobile-hide"><span class="ml">Duración</span><div class="mv">${esc(durationLabel(item))}</div></div>
+      <div class="mobile-hide tablet-hide"><span class="ml">Dispositivo</span><div class="mv">${esc((item.devices ?? []).join(", ") || "Sin vincular")}</div></div>
+      <div class="actions"><button data-action="details" data-id="${item.id}">Ver</button>${!["expired","revoked"].includes(item.status) ? `<button data-action="toggle" data-id="${item.id}">${item.status === "disabled" ? "Activar" : "Pausar"}</button>` : ""}</div>
+    </article>`).join("");
 }
 
-async function showDetails(id) {
+function renderActivity() {
+  const latest = licenses.slice(0, 4);
+  if (!latest.length) {
+    $("activity").innerHTML = `<div class="activity-item"><span class="dot"></span><div><strong>Sin movimientos todavía</strong><span>Genera tu primera key.</span></div></div>`;
+    return;
+  }
+  $("activity").innerHTML = latest.map((item) => {
+    const title = item.status === "active" ? "Licencia activa" : item.status === "unused" ? "Nueva licencia" : item.status === "disabled" ? "Licencia pausada" : item.status === "revoked" ? "Licencia revocada" : "Licencia expirada";
+    return `<div class="activity-item"><span class="dot"></span><div><strong>${title}</strong><span>${esc(item.key)} · ${relativeTime(item.createdAt)}</span></div></div>`;
+  }).join("");
+}
+
+async function openDetails(id) {
   try {
     const result = await api(`/admin/licenses/${id}`);
-    const license = result.license;
-    const devices = (license.devices ?? []).map((item) => item.hash).join(", ") || "Sin vincular";
-    $("detailsContent").innerHTML = `<dl class="detail-grid">
-      <dt>Key</dt><dd>${escapeHtml(license.key)}</dd>
-      <dt>Estado</dt><dd>${escapeHtml(statusLabel(license.status))}</dd>
-      <dt>Etiqueta</dt><dd>${escapeHtml(license.label ?? "—")}</dd>
-      <dt>Notas</dt><dd>${escapeHtml(license.notes ?? "—")}</dd>
-      <dt>Creada</dt><dd>${formatDate(license.createdAt)}</dd>
-      <dt>Activada</dt><dd>${formatDate(license.activatedAt)}</dd>
-      <dt>Expira</dt><dd>${license.expiresAt ? formatDate(license.expiresAt) : "Permanente"}</dd>
-      <dt>Dispositivos</dt><dd>${escapeHtml(devices)}</dd>
-      <dt>Última validación</dt><dd>${formatDate(license.lastValidation)}</dd>
-    </dl>`;
-    detailsDialog.showModal();
-  } catch (error) {
-    alert(error.message);
-  }
+    const item = result.license;
+    activeLicenseId = item.id;
+    $("modalKey").textContent = item.key;
+    const deviceText = (item.devices ?? []).map((device) => device.hash).join(", ") || "Sin vincular";
+    const detailRows = [
+      ["Estado", statusLabel(item.status)],
+      ["Etiqueta", item.label || "Sin etiqueta"],
+      ["Duración", durationLabel(item)],
+      ["Dispositivo", deviceText],
+      ["Creada", formatDate(item.createdAt)],
+      ["Activada", formatDate(item.activatedAt)],
+      ["Expira", item.expiresAt ? formatDate(item.expiresAt) : "Permanente"],
+      ["Última validación", formatDate(item.lastValidation)],
+      ["Notas", item.notes || "—"],
+    ];
+    $("details").innerHTML = detailRows.map(([name, value]) => `<div class="detail"><span>${esc(name)}</span><span>${esc(value)}</span></div>`).join("");
+    const actions = [];
+    if (item.status === "disabled") actions.push(`<button class="ghost" data-action="enable">Reactivar</button>`);
+    else if (!["expired", "revoked"].includes(item.status)) actions.push(`<button class="ghost" data-action="disable">Pausar</button>`);
+    if (!["revoked", "expired"].includes(item.status)) actions.push(`<button class="ghost" data-action="reset-device">Reset dispositivo</button>`);
+    if (item.status !== "revoked") actions.push(`<button class="danger" data-action="revoke">Revocar</button>`);
+    actions.push(`<button class="danger" data-action="delete">Eliminar</button>`);
+    $("modalActions").innerHTML = actions.join("");
+    $("modal").showModal();
+  } catch (error) { toast(error.message); }
+}
+
+async function performAction(id, action, fromModal = false) {
+  try {
+    if (action === "delete") await api(`/admin/licenses/${id}`, { method: "DELETE" });
+    else await api(`/admin/licenses/${action}`, { method: "POST", body: { id } });
+    if (fromModal) $("modal").close();
+    toast(actionMessage(action));
+    await loadAll();
+  } catch (error) { toast(error.message); }
 }
 
 async function api(path, { method = "GET", body } = {}) {
@@ -231,55 +240,29 @@ async function api(path, { method = "GET", body } = {}) {
   if (!token) throw new Error("La sesión del administrador expiró.");
   const response = await fetch(`${config.LICENSE_API_URL.replace(/\/$/, "")}${path}`, {
     method,
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Accept": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const result = await response.json().catch(() => ({ success: false, code: "SERVER_ERROR" }));
   if (!response.ok || !result.success) {
     if (response.status === 401) await supabase.auth.signOut();
-    throw new Error(adminErrorMessage(result.code));
+    throw new Error(errorMessage(result.code));
   }
   return result;
 }
 
-function adminErrorMessage(code) {
-  const messages = {
-    UNAUTHORIZED: "La sesión del administrador no es válida.",
-    FORBIDDEN: "Esta cuenta no tiene el rol admin.",
-    INVALID_QUANTITY: "La cantidad debe estar entre 1 y 100.",
-    INVALID_DURATION: "La duración personalizada no es válida.",
-    INVALID_DEVICE_LIMIT: "El límite de dispositivos no es válido.",
-    SERVER_ERROR: "El servidor no pudo completar la operación.",
-    NOT_FOUND: "No se encontró la licencia.",
-  };
-  return messages[code] ?? "No fue posible completar la operación.";
+function durationLabel(item) {
+  if (item.durationDays == null) return "Permanente";
+  return `${item.durationDays} días · ${item.durationStartMode === "generation" ? "desde generación" : "desde activación"}`;
 }
-
-function statusLabel(status) {
-  return ({ active: "Activa", unused: "Sin activar", expired: "Expirada", revoked: "Revocada", disabled: "Deshabilitada" })[status] ?? status;
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
-function csvCell(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
-
-function showMessage(element, message) {
-  element.textContent = message;
-  element.hidden = false;
-}
-function hideMessage(element) { element.hidden = true; }
-function escapeHtml(value) {
-  const span = document.createElement("span");
-  span.textContent = String(value ?? "");
-  return span.innerHTML;
-}
+function statusLabel(status) { return ({ active:"Activa", unused:"Sin activar", expired:"Expirada", disabled:"Pausada", revoked:"Revocada" })[status] ?? status; }
+function actionMessage(action) { return ({ enable:"Licencia reactivada", disable:"Licencia pausada", "reset-device":"Dispositivo reseteado", revoke:"Licencia revocada", delete:"Licencia eliminada" })[action] ?? "Acción completada"; }
+function errorMessage(code) { return ({ UNAUTHORIZED:"La sesión del administrador no es válida.", FORBIDDEN:"Esta cuenta no tiene permisos de administrador.", INVALID_QUANTITY:"La cantidad debe estar entre 1 y 100.", INVALID_DURATION:"La duración no es válida.", INVALID_DEVICE_LIMIT:"El límite de dispositivos no es válido.", NOT_FOUND:"No se encontró la licencia.", SERVER_ERROR:"El servidor no pudo completar la operación." })[code] ?? "No fue posible completar la operación."; }
+function formatDate(value) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("es-MX", { dateStyle:"medium", timeStyle:"short" }).format(date); }
+function relativeTime(value) { if (!value) return "recientemente"; const ms = Date.now() - new Date(value).getTime(); if (!Number.isFinite(ms) || ms < 0) return "recientemente"; const min = Math.floor(ms/60000); if (min < 1) return "ahora"; if (min < 60) return `hace ${min} min`; const h = Math.floor(min/60); if (h < 24) return `hace ${h} h`; const d = Math.floor(h/24); return `hace ${d} d`; }
+function toast(message) { document.querySelector(".toast")?.remove(); const element = document.createElement("div"); element.className = "toast"; element.textContent = message; document.body.appendChild(element); setTimeout(() => element.remove(), 1900); }
+function esc(value) { const element = document.createElement("span"); element.textContent = String(value ?? ""); return element.innerHTML; }
+function setBusy(button, busy, label) { button.disabled = busy; button.textContent = label; }
+function showLoginError(message) { $("loginError").textContent = message; $("loginError").hidden = false; }
+function hideLoginError() { $("loginError").hidden = true; }
+async function handleSessionError(error) { showLoginError(error.message); await supabase.auth.signOut(); }
