@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.MainActivity
@@ -49,7 +50,7 @@ class GameLauncherActivity : ComponentActivity() {
         }
 
         setContent {
-            val state = androidx.lifecycle.compose.collectAsStateWithLifecycle(viewModel.uiState).value
+            val state = viewModel.uiState.collectAsStateWithLifecycle().value
             GameLauncherScreen(
                 state = state,
                 isPresetEnabled = viewModel::isPresetEnabled,
