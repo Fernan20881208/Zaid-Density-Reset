@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -405,6 +406,7 @@ private fun GameIcon(
     val repository = remember(context.applicationContext) {
         AppIconRepositoryProvider.get(context.applicationContext)
     }
+    val invalidationVersion by repository.invalidationVersion.collectAsState()
     val iconResult by produceState<AppIconResult?>(
         initialValue = null,
         packageName,
@@ -412,7 +414,8 @@ private fun GameIcon(
         lastUpdateTime,
         installed,
         densityDpi,
-        uiMode
+        uiMode,
+        invalidationVersion
     ) {
         value = if (installed) repository.getAppIcon(packageName) else AppIconResult.NotFound
     }
