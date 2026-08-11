@@ -2,11 +2,16 @@ name: Publicar Density Reset
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: density-reset-release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -26,7 +31,41 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Leer versión
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          from pathlib import Path
+          text = Path("app/build.gradle.kts").read_text()
+          code = re.search(r"versionCode\s*=\s*(\d+)", text)
+          name = re.search(r'versionName\s*=\s*"([^"]+)"', text)
+          if not code or not name:
+              raise SystemExit("No se pudo leer versionCode/versionName")
+          print(f"code={code.group(1)}")
+          print(f"name={name.group(1)}")
+          print(f"tag=v{name.group(1)}")
+          PY
+
+      - name: Comprobar si la versión ya fue publicada
+        id: status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "La Release $TAG ya existe; no se vuelve a publicar."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Validar secretos de firma
+        if: steps.status.outputs.skip != 'true'
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -42,35 +81,26 @@ jobs:
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
           test -s "$RUNNER_TEMP/density-reset.keystore"
 
-      - name: Leer versión y validar tag
-        id: version
+      - name: Crear tag de versión
+        if: steps.status.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import re
-          from pathlib import Path
-          text = Path("app/build.gradle.kts").read_text()
-          code = re.search(r"versionCode\s*=\s*(\d+)", text)
-          name = re.search(r'versionName\s*=\s*"([^"]+)"', text)
-          if not code or not name:
-              raise SystemExit("No se pudo leer versionCode/versionName")
-          print(f"code={code.group(1)}")
-          print(f"name={name.group(1)}")
-          PY
-          VERSION_NAME="$(python3 - <<'PY'
-          import re
-          from pathlib import Path
-          text = Path("app/build.gradle.kts").read_text()
-          print(re.search(r'versionName\s*=\s*"([^"]+)"', text).group(1))
-          PY
-          )"
-          test "${GITHUB_REF_NAME}" = "v${VERSION_NAME}" || {
-            echo "El tag ${GITHUB_REF_NAME} no coincide con versionName ${VERSION_NAME}";
-            exit 1;
-          }
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            test "$TAG_SHA" = "$GITHUB_SHA" || {
+              echo "El tag $TAG ya existe pero apunta a $TAG_SHA, no a $GITHUB_SHA";
+              exit 1;
+            }
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
 
       - name: Compilar, probar y firmar Release
+        if: steps.status.outputs.skip != 'true'
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/density-reset.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -83,6 +113,7 @@ jobs:
           ./gradlew clean lintDebug testDebugUnitTest assembleRelease
 
       - name: Verificar firma y preparar assets
+        if: steps.status.outputs.skip != 'true'
         id: assets
         shell: bash
         env:
@@ -115,10 +146,11 @@ jobs:
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Crear Release draft, subir assets y publicar atómicamente
+        if: steps.status.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           APK: ${{ steps.assets.outputs.apk }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
         shell: bash
         run: |
@@ -128,18 +160,24 @@ jobs:
           }
           trap cleanup ERR
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "La Release $TAG ya existe; se cancela para no sobrescribirla."
-            exit 1
+          NOTES="RELEASE_NOTES_${VERSION_NAME}.md"
+          if [ -s "$NOTES" ]; then
+            gh release create "$TAG" \
+              --verify-tag \
+              --draft \
+              --title "Density Reset ${VERSION_NAME}" \
+              --notes-file "$NOTES" \
+              "$APK#${APK}" \
+              "update.json#update.json"
+          else
+            gh release create "$TAG" \
+              --verify-tag \
+              --draft \
+              --title "Density Reset ${VERSION_NAME}" \
+              --generate-notes \
+              "$APK#${APK}" \
+              "update.json#update.json"
           fi
-
-          gh release create "$TAG" \
-            --verify-tag \
-            --draft \
-            --title "Density Reset ${VERSION_NAME}" \
-            --generate-notes \
-            "$APK#${APK}" \
-            "update.json#update.json"
 
           ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
           grep -Fxq "$APK" <<< "$ASSETS"
@@ -149,6 +187,7 @@ jobs:
           trap - ERR
 
       - name: Resumen de integridad
+        if: steps.status.outputs.skip != 'true'
         env:
           VERSION_CODE: ${{ steps.version.outputs.code }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
@@ -159,4 +198,5 @@ jobs:
             echo "- versionCode: ${VERSION_CODE}"
             echo "- SHA-256: \`${SHA256}\`"
             echo "- Assets: APK firmado + update.json"
+            echo "- Política: mandatory=true, minVersionCode=${VERSION_CODE}"
           } >> "$GITHUB_STEP_SUMMARY"
