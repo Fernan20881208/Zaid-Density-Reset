@@ -53,7 +53,7 @@ Deno.serve(async (request) => {
 async function readConfig() {
   const { data, error } = await service
     .from("app_config")
-    .select("maintenance_mode,maintenance_message,min_supported_version_code,latest_version_code,force_update,free_fire_enabled,free_fire_max_enabled,sensi_ultra_enabled,sensi_high_enabled,sensi_low_enabled,sensi_ultra_density,sensi_high_density,sensi_low_density,game_session_duration_seconds,announcement_enabled,announcement_title,announcement_message,quick_tile_enabled,github_updates_enabled,blocked_version_codes,updated_at")
+    .select("maintenance_mode,maintenance_message,min_supported_version_code,latest_version_code,force_update,free_fire_enabled,free_fire_max_enabled,sensi_ultra_enabled,sensi_very_high_enabled,sensi_high_enabled,sensi_medium_high_enabled,sensi_low_enabled,sensi_ultra_density,sensi_very_high_density,sensi_high_density,sensi_medium_high_density,sensi_low_density,game_session_duration_seconds,announcement_enabled,announcement_title,announcement_message,quick_tile_enabled,github_updates_enabled,blocked_version_codes,updated_at")
     .eq("singleton", true)
     .single();
   if (error || !data) throw error ?? new Error("config missing");
@@ -96,10 +96,14 @@ function sanitizePatch(input: Record<string, unknown>): Record<string, unknown> 
   copyBoolean(input, result, "free_fire_enabled");
   copyBoolean(input, result, "free_fire_max_enabled");
   copyBoolean(input, result, "sensi_ultra_enabled");
+  copyBoolean(input, result, "sensi_very_high_enabled");
   copyBoolean(input, result, "sensi_high_enabled");
+  copyBoolean(input, result, "sensi_medium_high_enabled");
   copyBoolean(input, result, "sensi_low_enabled");
   copyInteger(input, result, "sensi_ultra_density", 20, 1000);
+  copyInteger(input, result, "sensi_very_high_density", 20, 1000);
   copyInteger(input, result, "sensi_high_density", 20, 1000);
+  copyInteger(input, result, "sensi_medium_high_density", 20, 1000);
   copyInteger(input, result, "sensi_low_density", 20, 1000);
   copyInteger(input, result, "game_session_duration_seconds", 5, 150);
   copyBoolean(input, result, "announcement_enabled");
