@@ -152,7 +152,7 @@ class ShizukuGameController(context: Context) {
 }
 
 internal fun parseForegroundPackage(output: String): String? {
-    val activityRegex = Regex("""\\bu\\d+\\s+([A-Za-z0-9._]+)/(?:[A-Za-z0-9._$]+)""")
+    val activityRegex = Regex("""\bu\d+\s+([A-Za-z0-9._]+)/(?:[A-Za-z0-9._$]+)""")
     val preferredMarkers = listOf(
         "topResumedActivity=",
         "mResumedActivity:"
