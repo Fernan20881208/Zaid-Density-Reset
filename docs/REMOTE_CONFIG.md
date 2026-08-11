@@ -9,13 +9,23 @@ The single `public.app_config` row controls:
 - maintenance mode/message
 - minimum/latest supported version code, force update and blocked version codes
 - Free Fire / Free Fire MAX availability
-- Sensi Ultra / Alta / Baja availability and densities
+- Sensi Ultra / Muy Alta / Alta / Media Alta / Baja availability and densities
 - game session duration
 - in-app announcement
 - Quick Settings Tile availability
 - GitHub update checks
 
-Android validates all remote values before use. Density fallback values remain 20 / 72 / 280 and session duration fallback remains 30 seconds.
+Android validates all remote values before use. Density fallback values are 20 / 46 / 72 / 176 / 280 and session duration fallback remains 30 seconds.
+
+The five density keys are:
+
+- `sensi_ultra_enabled`, `sensi_ultra_density` → 20 DPI fallback
+- `sensi_very_high_enabled`, `sensi_very_high_density` → 46 DPI fallback
+- `sensi_high_enabled`, `sensi_high_density` → 72 DPI fallback
+- `sensi_medium_high_enabled`, `sensi_medium_high_density` → 176 DPI fallback
+- `sensi_low_enabled`, `sensi_low_density` → 280 DPI fallback
+
+Values below 72 DPI are applied through the existing WindowManager Binder/Shizuku path. Values at or above 72 DPI use the standard Shizuku `wm density` path with the existing Binder fallback.
 
 ## Reading configuration
 
@@ -30,11 +40,13 @@ Example request body:
 ```json
 {
   "maintenance_mode": false,
-  "latest_version_code": 12,
-  "min_supported_version_code": 12,
-  "force_update": false,
+  "latest_version_code": 13,
+  "min_supported_version_code": 13,
+  "force_update": true,
   "sensi_ultra_density": 20,
+  "sensi_very_high_density": 46,
   "sensi_high_density": 72,
+  "sensi_medium_high_density": 176,
   "sensi_low_density": 280,
   "game_session_duration_seconds": 30,
   "blocked_version_codes": []
