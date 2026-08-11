@@ -1,7 +1,7 @@
 package com.zaid.densityreset.launcher
 
 import android.content.Context
-import android.graphics.drawable.Drawable
+import android.os.Build
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,7 +23,8 @@ data class InstalledGameInfo(
     val installed: Boolean,
     val applicationName: String,
     val packageName: String,
-    val icon: Drawable?
+    val versionCode: Long,
+    val lastUpdateTime: Long
 )
 
 data class GameLauncherPreference(
@@ -38,21 +39,32 @@ class GameLauncherRepositoryImpl(context: Context) : GameLauncherRepository {
 
     override fun installedGame(game: SupportedGame): InstalledGameInfo {
         val applicationInfo = runCatching {
+            @Suppress("DEPRECATION")
             packageManager.getApplicationInfo(game.packageName, 0)
         }.getOrNull()
-        val installed = applicationInfo != null
+        val packageInfo = runCatching {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(game.packageName, 0)
+        }.getOrNull()
+        val installed = applicationInfo != null && packageInfo != null
         val label = applicationInfo?.let {
             runCatching { packageManager.getApplicationLabel(it).toString() }.getOrNull()
         }.orEmpty().ifBlank { game.displayName }
-        val icon = applicationInfo?.let {
-            runCatching { packageManager.getApplicationIcon(it) }.getOrNull()
-        }
+        val versionCode = packageInfo?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                it.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                it.versionCode.toLong()
+            }
+        } ?: 0L
         return InstalledGameInfo(
             game = game,
             installed = installed,
             applicationName = label,
             packageName = game.packageName,
-            icon = icon
+            versionCode = versionCode,
+            lastUpdateTime = packageInfo?.lastUpdateTime ?: 0L
         )
     }
 
