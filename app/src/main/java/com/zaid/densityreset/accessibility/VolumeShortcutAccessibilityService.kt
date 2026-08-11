@@ -12,13 +12,18 @@ import android.widget.Toast
 import com.zaid.densityreset.density.DensityPreferencesRepository
 import com.zaid.densityreset.density.ShizukuDensityController
 import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
+import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.service.DpiGameSessionService
+import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AppPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class VolumeShortcutAccessibilityService : AccessibilityService() {
@@ -35,12 +40,25 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     private val gameSessionRepository by lazy {
         GameSessionRepositoryImpl(applicationContext)
     }
+    private val gameController by lazy {
+        ShizukuGameController(applicationContext)
+    }
 
     private var volumeUpPressed = false
     private var volumeDownPressed = false
     private var timerScheduled = false
     private var triggeredForCurrentCycle = false
     private var gestureCycleActive = false
+
+    private var foregroundPackage: String? = null
+    private var gameLockJob: Job? = null
+    private var gameExitJob: Job? = null
+
+    private val sessionChangedListener: () -> Unit = {
+        serviceScope.launch {
+            synchronizeGameLock(resolveForeground = true)
+        }
+    }
 
     private val triggerRunnable = Runnable {
         timerScheduled = false
@@ -57,7 +75,11 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         resetGestureState()
+        DpiGameLockBridge.attach(sessionChangedListener)
         ShizukuManager.refresh()
+        serviceScope.launch {
+            synchronizeGameLock(resolveForeground = true)
+        }
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -120,6 +142,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             val activeSession = gameSessionRepository.read().sessionActive
             if (activeSession) {
+                cancelGameLockJobs()
                 DpiGameSessionService.restoreNow(
                     context = this@VolumeShortcutAccessibilityService,
                     source = DpiGameSessionService.RESTORE_SOURCE_VOLUME
@@ -163,6 +186,120 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
         }
     }
 
+    private suspend fun synchronizeGameLock(resolveForeground: Boolean) {
+        val session = gameSessionRepository.read()
+        val selectedGame = session.selectedGame
+        val targetDensity = session.targetDensity
+
+        if (
+            !session.sessionActive ||
+            session.currentStep != SessionStep.SESSION_ACTIVE ||
+            selectedGame == null ||
+            targetDensity == null
+        ) {
+            cancelGameLockJobs()
+            return
+        }
+
+        var activePackage = foregroundPackage
+        if (resolveForeground || activePackage.isNullOrBlank()) {
+            val resolved = gameController.foregroundPackage().getOrNull()
+            if (!resolved.isNullOrBlank() && !isTransientPackage(resolved)) {
+                foregroundPackage = resolved
+                activePackage = resolved
+            }
+        }
+
+        when {
+            activePackage == selectedGame.packageName -> {
+                gameExitJob?.cancel()
+                gameExitJob = null
+                startGameLockGuard()
+            }
+
+            activePackage.isNullOrBlank() || isTransientPackage(activePackage) -> Unit
+
+            else -> scheduleGameExitRestore()
+        }
+    }
+
+    private fun startGameLockGuard() {
+        if (gameLockJob?.isActive == true) return
+
+        gameLockJob = serviceScope.launch {
+            while (isActive) {
+                val session = gameSessionRepository.read()
+                val selectedGame = session.selectedGame
+                val targetDensity = session.targetDensity
+
+                if (
+                    !session.sessionActive ||
+                    session.currentStep != SessionStep.SESSION_ACTIVE ||
+                    selectedGame == null ||
+                    targetDensity == null ||
+                    foregroundPackage != selectedGame.packageName
+                ) {
+                    return@launch
+                }
+
+                val shizuku = ShizukuManager.currentState()
+                if (shizuku.running && shizuku.permissionGranted) {
+                    val state = densityController.getSystemState().getOrNull()
+                    if (state != null && state.currentDensity != targetDensity) {
+                        densityController.applyDensity(targetDensity)
+                    }
+                }
+
+                delay(DPI_LOCK_CHECK_INTERVAL_MILLIS)
+            }
+        }
+    }
+
+    private fun scheduleGameExitRestore() {
+        gameLockJob?.cancel()
+        gameLockJob = null
+        gameExitJob?.cancel()
+
+        gameExitJob = serviceScope.launch {
+            delay(GAME_EXIT_GRACE_MILLIS)
+
+            val session = gameSessionRepository.read()
+            val selectedGame = session.selectedGame ?: return@launch
+            if (
+                !session.sessionActive ||
+                session.currentStep != SessionStep.SESSION_ACTIVE
+            ) {
+                return@launch
+            }
+
+            val currentPackage = foregroundPackage
+                ?: gameController.foregroundPackage().getOrNull()
+
+            if (
+                currentPackage != selectedGame.packageName &&
+                !currentPackage.isNullOrBlank() &&
+                !isTransientPackage(currentPackage)
+            ) {
+                DpiGameSessionService.restoreNow(
+                    context = this@VolumeShortcutAccessibilityService,
+                    source = DpiGameSessionService.RESTORE_SOURCE_GAME_EXIT
+                )
+            } else {
+                synchronizeGameLock(resolveForeground = currentPackage.isNullOrBlank())
+            }
+        }
+    }
+
+    private fun cancelGameLockJobs() {
+        gameLockJob?.cancel()
+        gameLockJob = null
+        gameExitJob?.cancel()
+        gameExitJob = null
+    }
+
+    private fun isTransientPackage(packageName: String?): Boolean =
+        packageName != null && packageName in TRANSIENT_PACKAGES
+
     private fun vibrateBriefly() {
         val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -191,6 +328,25 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
+        if (
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED
+        ) {
+            return
+        }
+
+        val packageName = event.packageName
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+        if (!packageName.isNullOrBlank() && !isTransientPackage(packageName)) {
+            foregroundPackage = packageName
+        }
+
+        serviceScope.launch {
+            synchronizeGameLock(resolveForeground = packageName.isNullOrBlank())
+        }
     }
 
     override fun onInterrupt() {
@@ -198,7 +354,9 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        DpiGameLockBridge.detach()
         resetGestureState()
+        cancelGameLockJobs()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -206,5 +364,15 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     private companion object {
         const val GESTURE_DURATION_MILLIS = 2_000L
         const val SUCCESS_VIBRATION_MILLIS = 60L
+        const val DPI_LOCK_CHECK_INTERVAL_MILLIS = 1_200L
+        const val GAME_EXIT_GRACE_MILLIS = 1_250L
+
+        val TRANSIENT_PACKAGES = setOf(
+            "com.android.systemui",
+            "android",
+            "com.android.permissioncontroller",
+            "com.google.android.permissioncontroller",
+            "com.miui.securitycenter"
+        )
     }
 }
