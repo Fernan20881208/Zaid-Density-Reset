@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build, firma y Release oficial
+    name: Build y publicar Release
     runs-on: ubuntu-latest
 
     steps:
@@ -64,8 +64,9 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validar secretos de firma
+      - name: Determinar modo de firma
         if: steps.status.outputs.skip != 'true'
+        id: signing
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -74,12 +75,76 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE_B64" || { echo "Falta ANDROID_KEYSTORE_BASE64"; exit 1; }
-          test -n "$STORE_PASSWORD" || { echo "Falta ANDROID_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "Falta ANDROID_KEY_ALIAS"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "Falta ANDROID_KEY_PASSWORD"; exit 1; }
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
-          test -s "$RUNNER_TEMP/density-reset.keystore"
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
+            test -s "$RUNNER_TEMP/density-reset.keystore"
+            echo "Se usará la firma release persistente."
+          else
+            echo "mode=transition-debug" >> "$GITHUB_OUTPUT"
+            echo "Secrets de release ausentes: se publicará el build de transición firmado con debug."
+          fi
+
+      - name: Compilar y probar Release firmada
+        if: steps.status.outputs.skip != 'true' && steps.signing.outputs.mode == 'release'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/density-reset.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean lintDebug testDebugUnitTest assembleRelease
+
+      - name: Compilar y probar build de transición
+        if: steps.status.outputs.skip != 'true' && steps.signing.outputs.mode == 'transition-debug'
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean lintDebug testDebugUnitTest assembleDebug
+
+      - name: Verificar APK y preparar metadata obligatoria
+        if: steps.status.outputs.skip != 'true'
+        id: assets
+        shell: bash
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNING_MODE" = "release" ]; then
+            SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
+          else
+            SOURCE_APK="app/build/outputs/apk/debug/app-debug.apk"
+          fi
+
+          APK="DensityReset-v${VERSION_NAME}.apk"
+          test -s "$SOURCE_APK"
+          cp "$SOURCE_APK" "$APK"
+
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          test "${#SHA256}" -eq 64
+
+          jq -n \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg apkAsset "$APK" \
+            --arg sha256 "$SHA256" \
+            --argjson minVersionCode "$VERSION_CODE" \
+            '{versionCode:$versionCode,versionName:$versionName,apkAsset:$apkAsset,sha256:$sha256,mandatory:true,minVersionCode:$minVersionCode}' \
+            > update.json
+
+          jq -e ".versionCode == $VERSION_CODE and .minVersionCode == $VERSION_CODE and .mandatory == true" update.json >/dev/null
+          test "$(jq -r .sha256 update.json)" = "$SHA256"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Crear tag de versión
         if: steps.status.outputs.skip != 'true'
@@ -99,52 +164,6 @@ jobs:
             git push origin "$TAG"
           fi
 
-      - name: Compilar, probar y firmar Release
-        if: steps.status.outputs.skip != 'true'
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/density-reset.keystore
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          ./gradlew clean lintDebug testDebugUnitTest assembleRelease
-
-      - name: Verificar firma y preparar assets
-        if: steps.status.outputs.skip != 'true'
-        id: assets
-        shell: bash
-        env:
-          VERSION_CODE: ${{ steps.version.outputs.code }}
-          VERSION_NAME: ${{ steps.version.outputs.name }}
-        run: |
-          set -euo pipefail
-          SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
-          APK="DensityReset-v${VERSION_NAME}.apk"
-          test -s "$SOURCE_APK"
-          cp "$SOURCE_APK" "$APK"
-
-          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
-
-          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
-          test "${#SHA256}" -eq 64
-          jq -n \
-            --argjson versionCode "$VERSION_CODE" \
-            --arg versionName "$VERSION_NAME" \
-            --arg apkAsset "$APK" \
-            --arg sha256 "$SHA256" \
-            --argjson minVersionCode "$VERSION_CODE" \
-            '{versionCode:$versionCode,versionName:$versionName,apkAsset:$apkAsset,sha256:$sha256,mandatory:true,minVersionCode:$minVersionCode}' \
-            > update.json
-
-          jq -e ".versionCode == $VERSION_CODE and .minVersionCode == $VERSION_CODE and .mandatory == true" update.json >/dev/null
-          test "$(jq -r .sha256 update.json)" = "$SHA256"
-          echo "apk=$APK" >> "$GITHUB_OUTPUT"
-          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
-
       - name: Crear Release draft, subir assets y publicar atómicamente
         if: steps.status.outputs.skip != 'true'
         env:
@@ -152,6 +171,7 @@ jobs:
           APK: ${{ steps.assets.outputs.apk }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         shell: bash
         run: |
           set -euo pipefail
@@ -161,23 +181,25 @@ jobs:
           trap cleanup ERR
 
           NOTES="RELEASE_NOTES_${VERSION_NAME}.md"
-          if [ -s "$NOTES" ]; then
-            gh release create "$TAG" \
-              --verify-tag \
-              --draft \
-              --title "Density Reset ${VERSION_NAME}" \
-              --notes-file "$NOTES" \
-              "$APK#${APK}" \
-              "update.json#update.json"
-          else
-            gh release create "$TAG" \
-              --verify-tag \
-              --draft \
-              --title "Density Reset ${VERSION_NAME}" \
-              --generate-notes \
-              "$APK#${APK}" \
-              "update.json#update.json"
+          EXTRA=""
+          if [ "$SIGNING_MODE" = "transition-debug" ]; then
+            EXTRA=$'\n\n> Build de transición: si Android reporta firma incompatible con una instalación anterior, desinstala la versión anterior e instala esta una sola vez.'
           fi
+
+          if [ -s "$NOTES" ]; then
+            cp "$NOTES" /tmp/release-notes.md
+          else
+            printf '# Density Reset %s\n' "$VERSION_NAME" > /tmp/release-notes.md
+          fi
+          printf '%s\n' "$EXTRA" >> /tmp/release-notes.md
+
+          gh release create "$TAG" \
+            --verify-tag \
+            --draft \
+            --title "Density Reset ${VERSION_NAME}" \
+            --notes-file /tmp/release-notes.md \
+            "$APK#${APK}" \
+            "update.json#update.json"
 
           ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
           grep -Fxq "$APK" <<< "$ASSETS"
@@ -192,11 +214,13 @@ jobs:
           VERSION_CODE: ${{ steps.version.outputs.code }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
           SHA256: ${{ steps.assets.outputs.sha256 }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
           {
             echo "### Density Reset ${VERSION_NAME}"
             echo "- versionCode: ${VERSION_CODE}"
             echo "- SHA-256: \`${SHA256}\`"
-            echo "- Assets: APK firmado + update.json"
-            echo "- Política: mandatory=true, minVersionCode=${VERSION_CODE}"
+            echo "- Assets: APK + update.json"
+            echo "- mandatory=true, minVersionCode=${VERSION_CODE}"
+            echo "- signing mode: ${SIGNING_MODE}"
           } >> "$GITHUB_STEP_SUMMARY"
