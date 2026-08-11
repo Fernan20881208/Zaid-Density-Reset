@@ -109,6 +109,21 @@ class ShizukuGameController(context: Context) {
         )
     }
 
+    suspend fun foregroundPackage(): Result<String?> =
+        commandExecutor.execute(
+            arrayOf(
+                "/system/bin/dumpsys",
+                "activity",
+                "activities"
+            ),
+            timeoutSeconds = FOREGROUND_QUERY_TIMEOUT_SECONDS
+        ).mapCatching { result ->
+            if (!result.isSuccess) {
+                throw GameLaunchException("No se pudo consultar la aplicación activa.")
+            }
+            parseForegroundPackage(result.stdout)
+        }
+
     private fun getApplicationInfo(packageName: String): ApplicationInfo =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             appContext.packageManager.getApplicationInfo(
@@ -132,5 +147,34 @@ class ShizukuGameController(context: Context) {
 
     private companion object {
         const val MONKEY_TIMEOUT_SECONDS = 10L
+        const val FOREGROUND_QUERY_TIMEOUT_SECONDS = 5L
     }
+}
+
+internal fun parseForegroundPackage(output: String): String? {
+    val activityRegex = Regex("""\\bu\\d+\\s+([A-Za-z0-9._]+)/(?:[A-Za-z0-9._$]+)""")
+    val preferredMarkers = listOf(
+        "topResumedActivity=",
+        "mResumedActivity:"
+    )
+
+    for (marker in preferredMarkers) {
+        output.lineSequence()
+            .firstOrNull { line -> line.contains(marker) }
+            ?.let { line ->
+                activityRegex.find(line)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.let { return it }
+            }
+    }
+
+    return output.lineSequence()
+        .firstNotNullOfOrNull { line ->
+            if (!line.contains("ResumedActivity", ignoreCase = true)) {
+                null
+            } else {
+                activityRegex.find(line)?.groupValues?.getOrNull(1)
+            }
+        }
 }
