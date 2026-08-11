@@ -8,6 +8,10 @@ const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+const LEGACY_EPHEMERAL_SIGNING_VERSIONS = new Set(["1.5.0", "1.5.1"]);
+const LEGACY_SAFE_VERSION_CODE = 13;
+const STABLE_SIGNING_BASELINE_CODE = 14;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
@@ -24,7 +28,7 @@ Deno.serve(async (request) => {
   try {
     if (request.method === "GET") {
       const config = await readConfig();
-      return json({ success: true, config });
+      return json({ success: true, config: configForClient(request, config) });
     }
 
     if (request.method === "PUT") {
@@ -58,6 +62,42 @@ async function readConfig() {
     .single();
   if (error || !data) throw error ?? new Error("config missing");
   return data;
+}
+
+function configForClient(request: Request, config: Record<string, unknown>) {
+  const version = clientVersion(request.headers.get("user-agent") ?? "");
+  if (!version || !LEGACY_EPHEMERAL_SIGNING_VERSIONS.has(version)) return config;
+
+  const rawLatest = Number(config.latest_version_code ?? 0);
+  const blocked = Array.isArray(config.blocked_version_codes)
+    ? config.blocked_version_codes
+        .map(Number)
+        .filter((value) => Number.isSafeInteger(value) && value > 0 && value !== LEGACY_SAFE_VERSION_CODE)
+    : [];
+
+  const safeConfig: Record<string, unknown> = {
+    ...config,
+    min_supported_version_code: LEGACY_SAFE_VERSION_CODE,
+    latest_version_code: LEGACY_SAFE_VERSION_CODE,
+    force_update: false,
+    github_updates_enabled: false,
+    blocked_version_codes: blocked,
+  };
+
+  if (rawLatest >= STABLE_SIGNING_BASELINE_CODE) {
+    safeConfig.announcement_enabled = true;
+    safeConfig.announcement_title = "Actualización 1.5.2 disponible";
+    safeConfig.announcement_message =
+      "La versión 1.5.1 fue firmada con una clave temporal. Para pasar a 1.5.2 necesitas una reinstalación única. " +
+      "Después de instalar 1.5.2, las siguientes actualizaciones volverán a funcionar normalmente desde la app con la firma estable.";
+  }
+
+  return safeConfig;
+}
+
+function clientVersion(userAgent: string): string | null {
+  const match = /^DensityReset\/([0-9]+(?:\.[0-9]+){1,3})\b/i.exec(userAgent.trim());
+  return match?.[1] ?? null;
 }
 
 async function requireAdmin(request: Request): Promise<{ userId: string } | Response> {

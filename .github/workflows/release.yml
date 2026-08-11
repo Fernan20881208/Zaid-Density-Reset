@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: density-reset-release
@@ -64,47 +65,60 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Determinar modo de firma
+      - name: Obtener firma persistente con GitHub OIDC
         if: steps.status.outputs.skip != 'true'
-        id: signing
         env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_ENDPOINT: https://zzlvupunploglgxbgllm.supabase.co/functions/v1/release-signing
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "mode=release" >> "$GITHUB_OUTPUT"
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
-            test -s "$RUNNER_TEMP/density-reset.keystore"
-            echo "Se usará la firma release persistente."
-          else
-            echo "mode=transition-debug" >> "$GITHUB_OUTPUT"
-            echo "Secrets de release ausentes: se publicará el build de transición firmado con debug."
-          fi
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub OIDC no está disponible"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "Falta token para GitHub OIDC"; exit 1; }
+
+          OIDC_RESPONSE="$(curl --fail --silent --show-error --location \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=density-reset-release")"
+          OIDC_TOKEN="$(jq -er '.value' <<< "$OIDC_RESPONSE")"
+
+          BUNDLE="$(curl --fail --silent --show-error --location \
+            --request POST \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "$SIGNING_ENDPOINT")"
+          jq -e '.success == true' <<< "$BUNDLE" >/dev/null
+
+          KEYSTORE_B64="$(jq -er '.keystore_base64' <<< "$BUNDLE")"
+          STORE_PASSWORD="$(jq -er '.store_password' <<< "$BUNDLE")"
+          KEY_ALIAS="$(jq -er '.key_alias' <<< "$BUNDLE")"
+          KEY_PASSWORD="$(jq -er '.key_password' <<< "$BUNDLE")"
+          EXPECTED_CERT_SHA256="$(jq -er '.cert_sha256' <<< "$BUNDLE" | tr '[:upper:]' '[:lower:]')"
+
+          test "${#EXPECTED_CERT_SHA256}" -eq 64
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_ALIAS"
+          echo "::add-mask::$KEY_PASSWORD"
+
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
+          test -s "$RUNNER_TEMP/density-reset.keystore"
+
+          {
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/density-reset.keystore"
+            echo "ANDROID_KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$KEY_PASSWORD"
+            echo "EXPECTED_CERT_SHA256=$EXPECTED_CERT_SHA256"
+          } >> "$GITHUB_ENV"
+
+          unset KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD BUNDLE OIDC_TOKEN OIDC_RESPONSE
+          echo "Firma Android persistente obtenida mediante OIDC."
 
       - name: Compilar y probar Release firmada
-        if: steps.status.outputs.skip != 'true' && steps.signing.outputs.mode == 'release'
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/density-reset.keystore
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        if: steps.status.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
           chmod +x gradlew
           ./gradlew clean lintDebug testDebugUnitTest assembleRelease
-
-      - name: Compilar y probar build de transición
-        if: steps.status.outputs.skip != 'true' && steps.signing.outputs.mode == 'transition-debug'
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          ./gradlew clean lintDebug testDebugUnitTest assembleDebug
 
       - name: Verificar APK y preparar metadata obligatoria
         if: steps.status.outputs.skip != 'true'
@@ -113,21 +127,22 @@ jobs:
         env:
           VERSION_CODE: ${{ steps.version.outputs.code }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
-          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
           set -euo pipefail
-          if [ "$SIGNING_MODE" = "release" ]; then
-            SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
-          else
-            SOURCE_APK="app/build/outputs/apk/debug/app-debug.apk"
-          fi
-
+          SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
           APK="DensityReset-v${VERSION_NAME}.apk"
           test -s "$SOURCE_APK"
           cp "$SOURCE_APK" "$APK"
 
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          SIGNER_INFO="$("$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK")"
+          printf '%s\n' "$SIGNER_INFO"
+          CERT_SHA256="$(printf '%s\n' "$SIGNER_INFO" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p; s/^V2 Signer: certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          test "${#CERT_SHA256}" -eq 64
+          test "$CERT_SHA256" = "$EXPECTED_CERT_SHA256" || {
+            echo "El certificado del APK no coincide con la firma persistente esperada."
+            exit 1
+          }
 
           SHA256="$(sha256sum "$APK" | awk '{print $1}')"
           test "${#SHA256}" -eq 64
@@ -145,6 +160,7 @@ jobs:
           test "$(jq -r .sha256 update.json)" = "$SHA256"
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "cert_sha256=$CERT_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Crear tag de versión
         if: steps.status.outputs.skip != 'true'
@@ -156,8 +172,8 @@ jobs:
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             TAG_SHA="$(git rev-list -n 1 "$TAG")"
             test "$TAG_SHA" = "$GITHUB_SHA" || {
-              echo "El tag $TAG ya existe pero apunta a $TAG_SHA, no a $GITHUB_SHA";
-              exit 1;
+              echo "El tag $TAG ya existe pero apunta a $TAG_SHA, no a $GITHUB_SHA"
+              exit 1
             }
           else
             git tag "$TAG" "$GITHUB_SHA"
@@ -171,7 +187,6 @@ jobs:
           APK: ${{ steps.assets.outputs.apk }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
-          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         shell: bash
         run: |
           set -euo pipefail
@@ -181,17 +196,11 @@ jobs:
           trap cleanup ERR
 
           NOTES="RELEASE_NOTES_${VERSION_NAME}.md"
-          EXTRA=""
-          if [ "$SIGNING_MODE" = "transition-debug" ]; then
-            EXTRA=$'\n\n> Build de transición: si Android reporta firma incompatible con una instalación anterior, desinstala la versión anterior e instala esta una sola vez.'
-          fi
-
           if [ -s "$NOTES" ]; then
             cp "$NOTES" /tmp/release-notes.md
           else
             printf '# Density Reset %s\n' "$VERSION_NAME" > /tmp/release-notes.md
           fi
-          printf '%s\n' "$EXTRA" >> /tmp/release-notes.md
 
           gh release create "$TAG" \
             --verify-tag \
@@ -214,13 +223,14 @@ jobs:
           VERSION_CODE: ${{ steps.version.outputs.code }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
           SHA256: ${{ steps.assets.outputs.sha256 }}
-          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+          CERT_SHA256: ${{ steps.assets.outputs.cert_sha256 }}
         run: |
           {
             echo "### Density Reset ${VERSION_NAME}"
             echo "- versionCode: ${VERSION_CODE}"
-            echo "- SHA-256: \`${SHA256}\`"
+            echo "- APK SHA-256: \`${SHA256}\`"
+            echo "- Signing certificate SHA-256: \`${CERT_SHA256}\`"
             echo "- Assets: APK + update.json"
             echo "- mandatory=true, minVersionCode=${VERSION_CODE}"
-            echo "- signing mode: ${SIGNING_MODE}"
+            echo "- signing mode: Supabase Vault + GitHub OIDC"
           } >> "$GITHUB_STEP_SUMMARY"
