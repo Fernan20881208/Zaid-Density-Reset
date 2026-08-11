@@ -19,10 +19,15 @@ import android.util.Log
 import com.zaid.densityreset.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 interface AppIconRepository {
+    val invalidationVersion: StateFlow<Long>
     suspend fun getAppIcon(packageName: String): AppIconResult
     fun invalidate(packageName: String? = null)
     fun invalidateForDensityChange()
@@ -62,6 +67,9 @@ class AndroidAppIconRepository(context: Context) : AppIconRepository {
     private val packageManager = appContext.packageManager
     private val launcherApps = appContext.getSystemService(LauncherApps::class.java)
     private val cache = ConcurrentHashMap<IconCacheKey, AppIconResult.Success>()
+    private val _invalidationVersion = MutableStateFlow(0L)
+
+    override val invalidationVersion: StateFlow<Long> = _invalidationVersion.asStateFlow()
 
     override suspend fun getAppIcon(packageName: String): AppIconResult =
         withContext(Dispatchers.IO) {
@@ -133,12 +141,18 @@ class AndroidAppIconRepository(context: Context) : AppIconRepository {
         } else {
             cache.keys.filter { it.packageName == packageName }.forEach(cache::remove)
         }
+        notifyInvalidated()
         debugLog("Icon cache invalidated: package=${packageName ?: "ALL"}")
     }
 
     override fun invalidateForDensityChange() {
         cache.clear()
+        notifyInvalidated()
         debugLog("Icon cache invalidated for density change")
+    }
+
+    private fun notifyInvalidated() {
+        _invalidationVersion.update { current -> current + 1L }
     }
 
     private fun loadSourceDrawable(packageName: String): LoadedDrawable? {
