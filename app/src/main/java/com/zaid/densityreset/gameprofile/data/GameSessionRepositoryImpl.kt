@@ -29,7 +29,7 @@ interface GameSessionRepository {
         errorMessage: String? = null
     )
 
-    suspend fun markSessionActive(restoreAt: Long)
+    suspend fun markSessionActive(restoreAt: Long?)
 
     suspend fun markRestorationFailure(message: String)
 
@@ -98,10 +98,14 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
         }
     }
 
-    override suspend fun markSessionActive(restoreAt: Long) {
+    override suspend fun markSessionActive(restoreAt: Long?) {
         appContext.gameSessionDataStore.edit { preferences ->
             preferences[GameSessionPreferenceKeys.sessionActive] = true
-            preferences[GameSessionPreferenceKeys.restoreAt] = restoreAt
+            if (restoreAt != null) {
+                preferences[GameSessionPreferenceKeys.restoreAt] = restoreAt
+            } else {
+                preferences.remove(GameSessionPreferenceKeys.restoreAt)
+            }
             preferences[GameSessionPreferenceKeys.currentSessionStep] =
                 SessionStep.SESSION_ACTIVE.name
             preferences.remove(GameSessionPreferenceKeys.errorMessage)
