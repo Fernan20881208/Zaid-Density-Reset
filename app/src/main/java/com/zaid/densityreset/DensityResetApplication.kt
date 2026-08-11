@@ -1,6 +1,7 @@
 package com.zaid.densityreset
 
 import android.app.Application
+import com.zaid.densityreset.icons.AppIconRepositoryProvider
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.ui.LicenseUiBinder
 import com.zaid.densityreset.quicktile.DensityTileStateObserver
@@ -13,6 +14,7 @@ import com.zaid.densityreset.update.UpdateManager
 class DensityResetApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        AppIconRepositoryProvider.initialize(this)
         ShizukuManager.initialize(this)
         RemoteConfigManager.initialize(this)
         UpdateManager.initialize(this)
