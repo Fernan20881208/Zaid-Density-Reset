@@ -1,6 +1,5 @@
 package com.zaid.densityreset.launcher
 
-import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -39,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,13 +49,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
+import com.zaid.densityreset.icons.AppIconRepositoryProvider
+import com.zaid.densityreset.icons.AppIconResult
 
 @Composable
 fun GameLauncherScreen(
@@ -211,7 +215,13 @@ private fun GameCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                GameIcon(state.icon, state.applicationName.take(2).uppercase())
+                GameIcon(
+                    packageName = state.packageName,
+                    versionCode = state.versionCode,
+                    lastUpdateTime = state.lastUpdateTime,
+                    installed = state.installed,
+                    fallback = state.applicationName.take(2).uppercase()
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         state.applicationName,
@@ -247,6 +257,18 @@ private fun GameCard(
                         "${profile.displayName} · ${profile.density} DPI",
                         fontWeight = FontWeight.SemiBold
                     )
+                    Text(
+                        profile.description,
+                        color = Color(0xFFC6CFDD),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    profileWarning(profile)?.let { warning ->
+                        Text(
+                            warning,
+                            color = Color(0xFFFFD28E),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     state.lastProfile?.let {
                         Text(
                             "Último usado: ${it.displayName} · ${it.density} DPI",
@@ -270,7 +292,7 @@ private fun GameCard(
                 exit = fadeOut(tween(120))
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DensityPreset.entries.forEach { preset ->
+                    DensityPreset.visualOrder.forEach { preset ->
                         ProfileRow(
                             preset = preset,
                             selected = state.selectedProfile == preset,
@@ -332,25 +354,104 @@ private fun ProfileRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Crossfade(selected, label = "profile-check") { checked ->
-            Text(if (checked) "●" else "○", color = if (checked) Color(0xFF9DEAF4) else Color(0xFFC6CFDD))
+            Text(
+                if (checked) "●" else "○",
+                color = if (checked) Color(0xFF9DEAF4) else Color(0xFFC6CFDD)
+            )
         }
-        Text(
-            preset.displayName,
-            modifier = Modifier.weight(1f),
-            color = if (enabled) Color.White else Color(0x99FFFFFF),
-            fontWeight = FontWeight.SemiBold
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                preset.displayName,
+                color = if (enabled) Color.White else Color(0x99FFFFFF),
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                preset.description,
+                color = if (enabled) Color(0xFFC6CFDD) else Color(0x80FFFFFF),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Column(horizontalAlignment = Alignment.End) {
             Text("${preset.density} DPI", color = if (enabled) Color.White else Color(0x99FFFFFF))
-            if (!enabled) {
-                Text(
-                    "Temporalmente no disponible",
-                    color = Color(0xFFFFD28E),
-                    style = MaterialTheme.typography.labelSmall
+            Text(
+                when {
+                    !enabled -> "No disponible"
+                    selected -> "Activo"
+                    else -> "Inactivo"
+                },
+                color = when {
+                    !enabled -> Color(0xFFFFD28E)
+                    selected -> Color(0xFF98F0BC)
+                    else -> Color(0xFFC6CFDD)
+                },
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun GameIcon(
+    packageName: String,
+    versionCode: Long,
+    lastUpdateTime: Long,
+    installed: Boolean,
+    fallback: String
+) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val densityDpi = configuration.densityDpi
+    val uiMode = configuration.uiMode
+    val repository = remember(context.applicationContext) {
+        AppIconRepositoryProvider.get(context.applicationContext)
+    }
+    val iconResult by produceState<AppIconResult?>(
+        initialValue = null,
+        packageName,
+        versionCode,
+        lastUpdateTime,
+        installed,
+        densityDpi,
+        uiMode
+    ) {
+        value = if (installed) repository.getAppIcon(packageName) else AppIconResult.NotFound
+    }
+    val loaded = iconResult as? AppIconResult.Success
+    val scale by animateFloatAsState(
+        targetValue = if (loaded == null) 0.98f else 1f,
+        animationSpec = tween(180),
+        label = "icon-container-scale"
+    )
+    Box(
+        modifier = Modifier
+            .widthIn(min = 52.dp, max = 68.dp)
+            .aspectRatio(1f)
+            .scale(scale)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0x68213A57)),
+        contentAlignment = Alignment.Center
+    ) {
+        Crossfade(targetState = loaded, label = "game-icon-reload") { success ->
+            if (success != null) {
+                Image(
+                    bitmap = success.bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
                 )
+            } else {
+                Text(fallback, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
+}
+
+private fun profileWarning(preset: DensityPreset): String? = when (preset) {
+    DensityPreset.ULTRA ->
+        "Sensi Ultra utiliza una escala extrema. Mantén ambos botones de volumen durante 2 segundos para restaurar el DPI si lo necesitas."
+    DensityPreset.VERY_HIGH ->
+        "Sensi Muy Alta utiliza una escala extremadamente reducida. Si tienes algún problema, puedes restaurar el DPI con ambos botones de volumen."
+    else -> null
 }
 
 @Composable
@@ -378,33 +479,6 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
         )
     ) {
         Text(text, fontWeight = FontWeight.ExtraBold)
-    }
-}
-
-@Composable
-private fun GameIcon(icon: Drawable?, fallback: String) {
-    val bitmap = remember(icon) {
-        icon?.let { runCatching { it.toBitmap().asImageBitmap() }.getOrNull() }
-    }
-    val scale by animateFloatAsState(
-        targetValue = if (bitmap == null) 0.94f else 1f,
-        animationSpec = tween(220),
-        label = "icon-scale"
-    )
-    Box(
-        modifier = Modifier
-            .widthIn(min = 52.dp, max = 68.dp)
-            .aspectRatio(1f)
-            .scale(scale)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0x68213A57)),
-        contentAlignment = Alignment.Center
-    ) {
-        if (bitmap != null) {
-            Image(bitmap, null, Modifier.fillMaxSize())
-        } else {
-            Text(fallback, color = Color.White, fontWeight = FontWeight.Bold)
-        }
     }
 }
 
