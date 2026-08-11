@@ -56,12 +56,20 @@
 
     <string name="preset_ultra_title">Sensi Ultra</string>
     <string name="preset_ultra_dpi">20 DPI</string>
-    <string name="preset_ultra_description">Escala extrema</string>
-    <string name="preset_ultra_game_description">Escala extrema</string>
+    <string name="preset_ultra_description">Sensibilidad extrema</string>
+    <string name="preset_ultra_game_description">Sensibilidad extrema</string>
+    <string name="preset_very_high_title">Sensi Muy Alta</string>
+    <string name="preset_very_high_dpi">46 DPI</string>
+    <string name="preset_very_high_description">Sensibilidad muy alta</string>
+    <string name="preset_very_high_game_description">Sensibilidad muy alta</string>
     <string name="preset_high_title">Sensi Alta</string>
     <string name="preset_high_dpi">72 DPI</string>
-    <string name="preset_high_description">Escala competitiva</string>
-    <string name="preset_high_game_description">Escala competitiva</string>
+    <string name="preset_high_description">Sensibilidad alta</string>
+    <string name="preset_high_game_description">Sensibilidad alta</string>
+    <string name="preset_medium_high_title">Sensi Media Alta</string>
+    <string name="preset_medium_high_dpi">176 DPI</string>
+    <string name="preset_medium_high_description">Sensibilidad media-alta</string>
+    <string name="preset_medium_high_game_description">Sensibilidad media-alta</string>
     <string name="preset_low_title">Sensi Baja</string>
     <string name="preset_low_dpi">280 DPI</string>
     <string name="preset_low_description">Escala equilibrada</string>
@@ -85,9 +93,12 @@
     <string name="ultra_hold_instruction">Mantén presionado el botón durante aproximadamente 1.5 segundos.</string>
     <string name="hold_to_apply_ultra">Aplicar Sensi Ultra · mantener</string>
     <string name="keep_holding">Sigue presionando…</string>
+    <string name="very_high_confirmation_title">Confirmar Sensi Muy Alta</string>
+    <string name="very_high_confirmation_warning">Sensi Muy Alta utiliza una escala extremadamente reducida. Si tienes algún problema, puedes restaurar el DPI con ambos botones de volumen.</string>
+    <string name="apply_very_high">Aplicar Sensi Muy Alta</string>
     <string name="cancel">Cancelar</string>
 
-    <string name="game_profiles_summary">Elige un juego y un perfil. El DPI temporal se restaura automáticamente después de 30 segundos.</string>
+    <string name="game_profiles_summary">Elige un juego y un perfil. El DPI se mantiene mientras juegas y se restaura al salir.</string>
     <string name="select_game_title">Selecciona un juego</string>
     <string name="select_game_density_title">Selecciona un perfil de DPI</string>
     <string name="free_fire">Free Fire</string>

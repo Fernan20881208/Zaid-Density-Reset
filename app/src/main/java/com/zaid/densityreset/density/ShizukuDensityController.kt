@@ -2,6 +2,7 @@ package com.zaid.densityreset.density
 
 import android.content.Context
 import android.os.Process
+import com.zaid.densityreset.icons.DensityIconInvalidationCoordinator
 import com.zaid.densityreset.shizuku.ShizukuManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,28 +33,14 @@ class ShizukuDensityController(context: Context) : DensityController {
         getSystemState().getOrThrow().currentDensity
 
     override suspend fun applyDensity(density: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        val operation = runCatching {
             ensureShizukuReady()
+            val before = readSystemStatePreferBinder()
 
-            val binderAttempt = runCatching {
-                runBridge(
-                    action = ACTION_APPLY,
-                    density = density
-                )
-            }
-            val binderResult = binderAttempt.getOrNull()
-
-            if (binderResult?.success != true) {
-                val canFallback = density >= WM_MINIMUM_DENSITY && (
-                    binderResult == null ||
-                        binderResult.code in BINDER_FALLBACK_CODES
-                    )
-                if (canFallback) {
-                    applyWithWmFallback(density)
-                } else {
-                    throw binderAttempt.exceptionOrNull()
-                        ?: bridgeError(binderResult ?: invalidBridgeResult())
-                }
+            if (density < WM_MINIMUM_DENSITY) {
+                applyLowDensityUsingBinder(density)
+            } else {
+                applyStandardDensity(density)
             }
 
             val verified = readSystemStatePreferBinder()
@@ -63,12 +50,25 @@ class ShizukuDensityController(context: Context) : DensityController {
                     "No se pudo verificar el DPI aplicado."
                 )
             }
+            before to verified
         }
+
+        val states = operation.getOrElse { error ->
+            return@withContext Result.failure(error)
+        }
+        DensityIconInvalidationCoordinator.onDensityChanged(
+            context = appContext,
+            previousDensity = states.first.currentDensity,
+            expectedDensity = states.second.currentDensity,
+            hasOverride = states.second.hasOverride
+        )
+        Result.success(Unit)
     }
 
     override suspend fun resetDensity(): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        val operation = runCatching {
             ensureShizukuReady()
+            val before = readSystemStatePreferBinder()
 
             val binderResult = runCatching {
                 runBridge(action = ACTION_RESET)
@@ -84,7 +84,19 @@ class ShizukuDensityController(context: Context) : DensityController {
                     "No se pudo verificar el DPI aplicado."
                 )
             }
+            before to verified
         }
+
+        val states = operation.getOrElse { error ->
+            return@withContext Result.failure(error)
+        }
+        DensityIconInvalidationCoordinator.onDensityChanged(
+            context = appContext,
+            previousDensity = states.first.currentDensity,
+            expectedDensity = states.second.currentDensity,
+            hasOverride = states.second.hasOverride
+        )
+        Result.success(Unit)
     }
 
     suspend fun getSystemState(): Result<DensitySystemState> = withContext(Dispatchers.IO) {
@@ -92,6 +104,38 @@ class ShizukuDensityController(context: Context) : DensityController {
             ensureShizukuReady()
             readSystemStatePreferBinder()
         }
+    }
+
+    private fun applyLowDensityUsingBinder(density: Int) {
+        val result = runCatching {
+            runBridge(action = ACTION_APPLY, density = density)
+        }.getOrElse { error ->
+            throw if (error is DensityControlException) error else DensityControlException(
+                DensityFailureReason.REMOTE_PROCESS_FAILED,
+                "No fue posible aplicar el DPI mediante WindowManager Binder.",
+                error
+            )
+        }
+        if (!result.success) throw bridgeError(result)
+    }
+
+    private fun applyStandardDensity(density: Int) {
+        val shellResult = runCatching {
+            applyWithWmFallback(density)
+        }
+        if (shellResult.isSuccess) return
+
+        val binderResult = runCatching {
+            runBridge(action = ACTION_APPLY, density = density)
+        }.getOrNull()
+        if (binderResult?.success == true) return
+
+        throw binderResult?.let(::bridgeError)
+            ?: shellResult.exceptionOrNull()
+            ?: DensityControlException(
+                DensityFailureReason.REMOTE_PROCESS_FAILED,
+                "No fue posible aplicar el DPI."
+            )
     }
 
     private fun readSystemStatePreferBinder(): DensitySystemState {
@@ -351,11 +395,6 @@ class ShizukuDensityController(context: Context) : DensityController {
         "No fue posible acceder a WindowManager."
     )
 
-    private fun invalidBridgeResult() = BridgeResult(
-        success = false,
-        code = "WINDOW_MANAGER_UNAVAILABLE"
-    )
-
     private fun terminateProcess(process: ShizukuRemoteProcess) {
         runCatching {
             process.destroy()
@@ -415,13 +454,7 @@ class ShizukuDensityController(context: Context) : DensityController {
         const val COMMAND_TIMEOUT_SECONDS = 15L
         const val PROCESS_DESTROY_GRACE_SECONDS = 1L
         const val ANDROID_UIDS_PER_USER = 100_000
-        const val WM_MINIMUM_DENSITY = 72
-
-        val BINDER_FALLBACK_CODES = setOf(
-            "HIDDEN_API_UNAVAILABLE",
-            "WINDOW_MANAGER_UNAVAILABLE",
-            "REMOTE_PROCESS_FAILED"
-        )
+        const val WM_MINIMUM_DENSITY = DensityPreset.STANDARD_DENSITY_THRESHOLD
 
         val PHYSICAL_DENSITY_REGEX = Regex(
             pattern = "Physical\\s+density\\s*:\\s*(\\d+)",

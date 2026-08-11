@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -42,6 +41,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.zaid.densityreset.accessibility.VolumeShortcutAccessibilityService
 import com.zaid.densityreset.databinding.ActivityMainBinding
 import com.zaid.densityreset.databinding.DialogUltraConfirmationBinding
+import com.zaid.densityreset.databinding.DialogVeryHighConfirmationBinding
 import com.zaid.densityreset.databinding.ViewDensityPanelBinding
 import com.zaid.densityreset.databinding.ViewGameProfilePanelBinding
 import com.zaid.densityreset.density.DensityPreset
@@ -51,6 +51,8 @@ import com.zaid.densityreset.gameprofile.domain.GameProfileUiState
 import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.gameprofile.ui.GameProfileViewModel
+import com.zaid.densityreset.icons.AppIconRepositoryProvider
+import com.zaid.densityreset.icons.AppIconResult
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.util.AccessibilityUtils
 import com.zaid.densityreset.util.AppPreferences
@@ -67,11 +69,14 @@ class MainActivity : AppCompatActivity() {
 
     private val densityViewModel: DensityViewModel by viewModels()
     private val gameProfileViewModel: GameProfileViewModel by viewModels()
+    private val appIconRepository by lazy {
+        AppIconRepositoryProvider.get(applicationContext)
+    }
 
     private var latestDensityState = DensityUiState()
     private var latestGameProfileState = GameProfileUiState()
     private var pendingGameSessionStart = false
-    private val gameIconCache = mutableMapOf<SupportedGame, Drawable?>()
+    private var lastIconReloadDensity: Int? = null
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -114,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         ShizukuManager.refresh()
         densityViewModel.refresh()
         gameProfileViewModel.refreshEnvironment()
+        clearVisibleIconLoadKeys()
     }
 
     override fun onDestroy() {
@@ -218,10 +224,20 @@ class MainActivity : AppCompatActivity() {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             showUltraConfirmation()
         }
+        densityBinding.presetVeryHigh.setOnClickListener {
+            if (isGameOperationBusy(latestGameProfileState)) return@setOnClickListener
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            showVeryHighConfirmation()
+        }
         densityBinding.presetHigh.setOnClickListener {
             if (isGameOperationBusy(latestGameProfileState)) return@setOnClickListener
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             densityViewModel.applyPreset(DensityPreset.HIGH)
+        }
+        densityBinding.presetMediumHigh.setOnClickListener {
+            if (isGameOperationBusy(latestGameProfileState)) return@setOnClickListener
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            densityViewModel.applyPreset(DensityPreset.MEDIUM_HIGH)
         }
         densityBinding.presetLow.setOnClickListener {
             if (isGameOperationBusy(latestGameProfileState)) return@setOnClickListener
@@ -247,17 +263,25 @@ class MainActivity : AppCompatActivity() {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             gameProfileViewModel.selectGame(SupportedGame.FREE_FIRE_MAX)
         }
-        gameProfileBinding.gamePresetUltra.setOnClickListener {
+        gameProfileBinding.gamePresetLow.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-            gameProfileViewModel.selectPreset(DensityPreset.ULTRA)
+            gameProfileViewModel.selectPreset(DensityPreset.LOW)
+        }
+        gameProfileBinding.gamePresetMediumHigh.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            gameProfileViewModel.selectPreset(DensityPreset.MEDIUM_HIGH)
         }
         gameProfileBinding.gamePresetHigh.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             gameProfileViewModel.selectPreset(DensityPreset.HIGH)
         }
-        gameProfileBinding.gamePresetLow.setOnClickListener {
+        gameProfileBinding.gamePresetVeryHigh.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-            gameProfileViewModel.selectPreset(DensityPreset.LOW)
+            gameProfileViewModel.selectPreset(DensityPreset.VERY_HIGH)
+        }
+        gameProfileBinding.gamePresetUltra.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            gameProfileViewModel.selectPreset(DensityPreset.ULTRA)
         }
         gameProfileBinding.buttonStartGameSession.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
@@ -287,18 +311,10 @@ class MainActivity : AppCompatActivity() {
     private fun observeUiState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    densityViewModel.uiState.collect(::renderDensityState)
-                }
-                launch {
-                    densityViewModel.events.collect(::showSnackbar)
-                }
-                launch {
-                    gameProfileViewModel.uiState.collect(::renderGameProfileState)
-                }
-                launch {
-                    gameProfileViewModel.events.collect(::showSnackbar)
-                }
+                launch { densityViewModel.uiState.collect(::renderDensityState) }
+                launch { densityViewModel.events.collect(::showSnackbar) }
+                launch { gameProfileViewModel.uiState.collect(::renderGameProfileState) }
+                launch { gameProfileViewModel.events.collect(::showSnackbar) }
             }
         }
     }
@@ -310,28 +326,17 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.current_density_value, it)
         } ?: getString(R.string.current_density_unknown)
 
-        renderSelection(
-            densityBinding.presetUltra,
-            state.activePreset == DensityPreset.ULTRA
-        )
-        renderSelection(
-            densityBinding.presetHigh,
-            state.activePreset == DensityPreset.HIGH
-        )
-        renderSelection(
-            densityBinding.presetLow,
-            state.activePreset == DensityPreset.LOW
-        )
+        renderSelection(densityBinding.presetUltra, state.activePreset == DensityPreset.ULTRA)
+        renderSelection(densityBinding.presetVeryHigh, state.activePreset == DensityPreset.VERY_HIGH)
+        renderSelection(densityBinding.presetHigh, state.activePreset == DensityPreset.HIGH)
+        renderSelection(densityBinding.presetMediumHigh, state.activePreset == DensityPreset.MEDIUM_HIGH)
+        renderSelection(densityBinding.presetLow, state.activePreset == DensityPreset.LOW)
 
-        densityBinding.presetUltraState.text = presetStateText(
-            state.activePreset == DensityPreset.ULTRA
-        )
-        densityBinding.presetHighState.text = presetStateText(
-            state.activePreset == DensityPreset.HIGH
-        )
-        densityBinding.presetLowState.text = presetStateText(
-            state.activePreset == DensityPreset.LOW
-        )
+        densityBinding.presetUltraState.text = presetStateText(state.activePreset == DensityPreset.ULTRA)
+        densityBinding.presetVeryHighState.text = presetStateText(state.activePreset == DensityPreset.VERY_HIGH)
+        densityBinding.presetHighState.text = presetStateText(state.activePreset == DensityPreset.HIGH)
+        densityBinding.presetMediumHighState.text = presetStateText(state.activePreset == DensityPreset.MEDIUM_HIGH)
+        densityBinding.presetLowState.text = presetStateText(state.activePreset == DensityPreset.LOW)
 
         densityBinding.densityProgressContainer.visibility =
             if (state.isApplying || state.isRefreshing) View.VISIBLE else View.GONE
@@ -354,6 +359,13 @@ class MainActivity : AppCompatActivity() {
             )
         } ?: getString(R.string.no_density_changes)
 
+        state.currentDensity?.let { currentDensity ->
+            if (lastIconReloadDensity != currentDensity) {
+                lastIconReloadDensity = currentDensity
+                clearVisibleIconLoadKeys()
+                reloadVisibleGameIcons()
+            }
+        }
         updateGlobalControlLocks()
     }
 
@@ -385,34 +397,22 @@ class MainActivity : AppCompatActivity() {
             state.selectedGame != null && !state.sessionActive
         )
 
-        renderProfileCard(
-            gameProfileBinding.gamePresetUltra,
-            gameProfileBinding.gamePresetUltraCheck,
-            state.selectedPreset == DensityPreset.ULTRA,
-            locked
-        )
-        renderProfileCard(
-            gameProfileBinding.gamePresetHigh,
-            gameProfileBinding.gamePresetHighCheck,
-            state.selectedPreset == DensityPreset.HIGH,
-            locked
-        )
-        renderProfileCard(
-            gameProfileBinding.gamePresetLow,
-            gameProfileBinding.gamePresetLowCheck,
-            state.selectedPreset == DensityPreset.LOW,
-            locked
-        )
+        renderProfileCard(gameProfileBinding.gamePresetLow, gameProfileBinding.gamePresetLowCheck, state.selectedPreset == DensityPreset.LOW, locked)
+        renderProfileCard(gameProfileBinding.gamePresetMediumHigh, gameProfileBinding.gamePresetMediumHighCheck, state.selectedPreset == DensityPreset.MEDIUM_HIGH, locked)
+        renderProfileCard(gameProfileBinding.gamePresetHigh, gameProfileBinding.gamePresetHighCheck, state.selectedPreset == DensityPreset.HIGH, locked)
+        renderProfileCard(gameProfileBinding.gamePresetVeryHigh, gameProfileBinding.gamePresetVeryHighCheck, state.selectedPreset == DensityPreset.VERY_HIGH, locked)
+        renderProfileCard(gameProfileBinding.gamePresetUltra, gameProfileBinding.gamePresetUltraCheck, state.selectedPreset == DensityPreset.ULTRA, locked)
 
         val preparing = state.currentStep in PREPARING_STEPS
         val restoring = state.currentStep == SessionStep.RESTORING_DENSITY
         gameProfileBinding.buttonStartGameSession.text = when {
             restoring -> getString(R.string.game_session_restoring)
             preparing -> getString(R.string.game_session_preparing)
-            state.sessionActive -> getString(
+            state.sessionActive && state.secondsRemaining != null -> getString(
                 R.string.session_active_seconds,
-                state.secondsRemaining ?: 0
+                state.secondsRemaining
             )
+            state.sessionActive -> getString(R.string.game_session_active)
             state.selectedGame == null -> getString(R.string.select_a_game)
             state.selectedPreset == null -> getString(R.string.select_a_profile)
             else -> getString(
@@ -449,12 +449,8 @@ class MainActivity : AppCompatActivity() {
         val selected = state.selectedGame == game
         card.isEnabled = installed && !locked
         card.alpha = if (installed) 1f else 0.52f
-        status.text = getString(
-            if (installed) R.string.game_installed else R.string.game_not_installed
-        )
-        status.setTextColor(
-            color(if (installed) R.color.status_success else R.color.status_warning)
-        )
+        status.text = getString(if (installed) R.string.game_installed else R.string.game_not_installed)
+        status.setTextColor(color(if (installed) R.color.status_success else R.color.status_warning))
         renderSelection(card, selected)
         animateCheck(check, selected)
         loadGameIcon(icon, game, installed)
@@ -470,26 +466,46 @@ class MainActivity : AppCompatActivity() {
             imageView.tag = null
             return
         }
-        if (imageView.tag == game.packageName) return
-        val drawable = gameIconCache.getOrPut(game) {
-            runCatching {
-                packageManager.getApplicationIcon(game.packageName)
-            }.getOrNull()
-        }
-        if (drawable != null) {
-            imageView.setImageDrawable(drawable)
-            imageView.tag = game.packageName
-        } else {
-            imageView.setImageResource(R.drawable.ic_game_placeholder)
+
+        val loadKey = "${game.packageName}|${resources.configuration.densityDpi}"
+        if (imageView.tag == loadKey) return
+        imageView.tag = loadKey
+        imageView.setImageResource(R.drawable.ic_game_placeholder)
+
+        lifecycleScope.launch {
+            when (val result = appIconRepository.getAppIcon(game.packageName)) {
+                is AppIconResult.Success -> {
+                    if (imageView.tag == loadKey) imageView.setImageBitmap(result.bitmap)
+                }
+                else -> {
+                    if (imageView.tag == loadKey) imageView.setImageResource(R.drawable.ic_game_placeholder)
+                }
+            }
         }
     }
 
-    private fun renderProfileCard(
-        card: View,
-        check: View,
-        selected: Boolean,
-        locked: Boolean
-    ) {
+    private fun reloadVisibleGameIcons() {
+        if (!::gameProfileBinding.isInitialized) return
+        val installed = latestGameProfileState.installedGames
+        loadGameIcon(
+            gameProfileBinding.gameFreeFireIcon,
+            SupportedGame.FREE_FIRE,
+            SupportedGame.FREE_FIRE in installed
+        )
+        loadGameIcon(
+            gameProfileBinding.gameFreeFireMaxIcon,
+            SupportedGame.FREE_FIRE_MAX,
+            SupportedGame.FREE_FIRE_MAX in installed
+        )
+    }
+
+    private fun clearVisibleIconLoadKeys() {
+        if (!::gameProfileBinding.isInitialized) return
+        gameProfileBinding.gameFreeFireIcon.tag = null
+        gameProfileBinding.gameFreeFireMaxIcon.tag = null
+    }
+
+    private fun renderProfileCard(card: View, check: View, selected: Boolean, locked: Boolean) {
         card.isEnabled = !locked
         card.alpha = if (locked) 0.72f else 1f
         renderSelection(card, selected)
@@ -517,21 +533,11 @@ class MainActivity : AppCompatActivity() {
             view.alpha = 0f
             view.scaleX = 0.65f
             view.scaleY = 0.65f
-            view.animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(180L)
-                .setInterpolator(OvershootInterpolator())
-                .start()
+            view.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(180L)
+                .setInterpolator(OvershootInterpolator()).start()
         } else {
-            view.animate()
-                .alpha(0f)
-                .scaleX(0.65f)
-                .scaleY(0.65f)
-                .setDuration(120L)
-                .withEndAction { view.visibility = View.INVISIBLE }
-                .start()
+            view.animate().alpha(0f).scaleX(0.65f).scaleY(0.65f).setDuration(120L)
+                .withEndAction { view.visibility = View.INVISIBLE }.start()
         }
     }
 
@@ -546,11 +552,7 @@ class MainActivity : AppCompatActivity() {
             view.visibility = View.VISIBLE
             view.alpha = 0f
             view.translationY = 12f * resources.displayMetrics.density
-            view.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(220L)
-                .start()
+            view.animate().alpha(1f).translationY(0f).setDuration(220L).start()
         } else {
             view.visibility = View.GONE
         }
@@ -565,18 +567,14 @@ class MainActivity : AppCompatActivity() {
             else -> getString(R.string.game_session_preparing)
         }
         gameProfileBinding.sessionProgressSubtitle.text = if (game != null && preset != null) {
-            getString(
-                R.string.session_game_profile_format,
-                game.displayName,
-                preset.displayName,
-                preset.density
-            )
+            getString(R.string.session_game_profile_format, game.displayName, preset.displayName, preset.density)
         } else {
             getString(R.string.game_session_checking_state)
         }
 
-        val countdownVisible =
-            state.sessionActive && state.currentStep == SessionStep.SESSION_ACTIVE
+        val countdownVisible = state.sessionActive &&
+            state.currentStep == SessionStep.SESSION_ACTIVE &&
+            state.secondsRemaining != null
         gameProfileBinding.sessionCountdownContainer.visibility =
             if (countdownVisible) View.VISIBLE else View.GONE
         if (countdownVisible) {
@@ -586,30 +584,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val step = state.currentStep
-        renderStep(
-            gameProfileBinding.sessionStepSaved,
-            label = "DPI guardado",
-            completed = step.ordinal >= SessionStep.CLOSING_GAME.ordinal,
-            current = step == SessionStep.SAVING_DENSITY
-        )
-        renderStep(
-            gameProfileBinding.sessionStepRestarted,
-            label = "Juego reiniciado",
-            completed = step.ordinal >= SessionStep.SESSION_ACTIVE.ordinal,
-            current = step in setOf(SessionStep.CLOSING_GAME, SessionStep.OPENING_GAME)
-        )
-        renderStep(
-            gameProfileBinding.sessionStepActive,
-            label = "Sesión activa",
-            completed = step in setOf(SessionStep.RESTORING_DENSITY, SessionStep.COMPLETED),
-            current = step == SessionStep.SESSION_ACTIVE
-        )
-        renderStep(
-            gameProfileBinding.sessionStepRestore,
-            label = "Restaurar DPI",
-            completed = step == SessionStep.COMPLETED,
-            current = step == SessionStep.RESTORING_DENSITY || step == SessionStep.ERROR
-        )
+        renderStep(gameProfileBinding.sessionStepSaved, "DPI guardado", step.ordinal >= SessionStep.CLOSING_GAME.ordinal, step == SessionStep.SAVING_DENSITY)
+        renderStep(gameProfileBinding.sessionStepRestarted, "Juego reiniciado", step.ordinal >= SessionStep.SESSION_ACTIVE.ordinal, step in setOf(SessionStep.CLOSING_GAME, SessionStep.OPENING_GAME))
+        renderStep(gameProfileBinding.sessionStepActive, "Sesión activa", step in setOf(SessionStep.RESTORING_DENSITY, SessionStep.COMPLETED), step == SessionStep.SESSION_ACTIVE)
+        renderStep(gameProfileBinding.sessionStepRestore, "Restaurar DPI", step == SessionStep.COMPLETED, step == SessionStep.RESTORING_DENSITY || step == SessionStep.ERROR)
 
         gameProfileBinding.buttonRestoreGameSessionNow.visibility =
             if (state.sessionActive) View.VISIBLE else View.GONE
@@ -617,24 +595,9 @@ class MainActivity : AppCompatActivity() {
             state.currentStep != SessionStep.RESTORING_DENSITY
     }
 
-    private fun renderStep(
-        view: TextView,
-        label: String,
-        completed: Boolean,
-        current: Boolean
-    ) {
-        val newText = "${when {
-            completed -> "✓"
-            current -> "●"
-            else -> "○"
-        }} $label"
-        val newColor = color(
-            when {
-                completed -> R.color.status_success
-                current -> R.color.glass_accent_secondary
-                else -> R.color.glass_text_secondary
-            }
-        )
+    private fun renderStep(view: TextView, label: String, completed: Boolean, current: Boolean) {
+        val newText = "${when { completed -> "✓"; current -> "●"; else -> "○" }} $label"
+        val newColor = color(when { completed -> R.color.status_success; current -> R.color.glass_accent_secondary; else -> R.color.glass_text_secondary })
         if (view.text.toString() == newText && view.currentTextColor == newColor) return
         view.animate().cancel()
         view.alpha = 0.55f
@@ -650,20 +613,17 @@ class MainActivity : AppCompatActivity() {
         val densitySelectionEnabled = !gameBusy && !densityBusy
 
         densityBinding.presetUltra.isEnabled = densitySelectionEnabled
+        densityBinding.presetVeryHigh.isEnabled = densitySelectionEnabled
         densityBinding.presetHigh.isEnabled = densitySelectionEnabled
+        densityBinding.presetMediumHigh.isEnabled = densitySelectionEnabled
         densityBinding.presetLow.isEnabled = densitySelectionEnabled
         densityBinding.buttonEmergencyReset.isEnabled = when {
-            latestGameProfileState.sessionActive ->
-                latestGameProfileState.currentStep != SessionStep.RESTORING_DENSITY
+            latestGameProfileState.sessionActive -> latestGameProfileState.currentStep != SessionStep.RESTORING_DENSITY
             gameBusy -> false
             else -> !densityBusy
         }
         densityBinding.buttonEmergencyReset.text = getString(
-            if (latestGameProfileState.sessionActive) {
-                R.string.restore_now
-            } else {
-                R.string.emergency_reset_density
-            }
+            if (latestGameProfileState.sessionActive) R.string.restore_now else R.string.emergency_reset_density
         )
         binding.buttonTest.isEnabled = !gameBusy && !densityBusy
     }
@@ -673,6 +633,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun presetStateText(active: Boolean): String =
         getString(if (active) R.string.preset_active else R.string.preset_inactive)
+
+    private fun showVeryHighConfirmation() {
+        val dialog = Dialog(this)
+        val dialogBinding = DialogVeryHighConfirmationBinding.inflate(layoutInflater)
+        dialog.setContentView(dialogBinding.root)
+        dialog.setCancelable(true)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialogBinding.buttonApplyVeryHigh.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            dialog.dismiss()
+            densityViewModel.applyPreset(DensityPreset.VERY_HIGH)
+        }
+        dialogBinding.buttonCancelVeryHigh.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
 
     private fun showUltraConfirmation() {
         val dialog = Dialog(this)
@@ -687,9 +666,7 @@ class MainActivity : AppCompatActivity() {
 
         val confirmRunnable = Runnable {
             confirmed = true
-            dialogBinding.buttonApplyUltra.performHapticFeedback(
-                HapticFeedbackConstants.LONG_PRESS
-            )
+            dialogBinding.buttonApplyUltra.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             dialog.dismiss()
             densityViewModel.applyPreset(DensityPreset.ULTRA)
         }
@@ -698,13 +675,8 @@ class MainActivity : AppCompatActivity() {
             handler.removeCallbacks(confirmRunnable)
             progressAnimator?.cancel()
             dialogBinding.ultraHoldProgress.progress = 0
-            dialogBinding.buttonApplyUltra.text =
-                getString(R.string.hold_to_apply_ultra)
-            dialogBinding.buttonApplyUltra.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(120L)
-                .start()
+            dialogBinding.buttonApplyUltra.text = getString(R.string.hold_to_apply_ultra)
+            dialogBinding.buttonApplyUltra.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
         }
 
         dialogBinding.buttonApplyUltra.setOnTouchListener { view, event ->
@@ -712,33 +684,19 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     confirmed = false
                     view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                    dialogBinding.buttonApplyUltra.text =
-                        getString(R.string.keep_holding)
-                    dialogBinding.buttonApplyUltra.animate()
-                        .scaleX(0.98f)
-                        .scaleY(0.98f)
-                        .setDuration(120L)
-                        .start()
-                    progressAnimator = ObjectAnimator.ofInt(
-                        dialogBinding.ultraHoldProgress,
-                        "progress",
-                        0,
-                        100
-                    ).apply {
+                    dialogBinding.buttonApplyUltra.text = getString(R.string.keep_holding)
+                    dialogBinding.buttonApplyUltra.animate().scaleX(0.98f).scaleY(0.98f).setDuration(120L).start()
+                    progressAnimator = ObjectAnimator.ofInt(dialogBinding.ultraHoldProgress, "progress", 0, 100).apply {
                         duration = ULTRA_CONFIRM_HOLD_MILLIS
                         start()
                     }
                     handler.postDelayed(confirmRunnable, ULTRA_CONFIRM_HOLD_MILLIS)
                     true
                 }
-
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL,
-                MotionEvent.ACTION_OUTSIDE -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_OUTSIDE -> {
                     if (!confirmed) resetHoldState()
                     true
                 }
-
                 else -> true
             }
         }
@@ -758,24 +716,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun openInstagramProfile() {
         val username = getString(R.string.instagram_username)
-        val instagramIntent = Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse("instagram://user?username=$username")
-        ).apply {
+        val instagramIntent = Intent(Intent.ACTION_VIEW, Uri.parse("instagram://user?username=$username")).apply {
             setPackage("com.instagram.android")
         }
-
-        val openedInApp = runCatching {
-            startActivity(instagramIntent)
-            true
-        }.getOrDefault(false)
-
+        val openedInApp = runCatching { startActivity(instagramIntent); true }.getOrDefault(false)
         if (!openedInApp) {
-            val browserIntent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("https://www.instagram.com/$username/")
-            )
-            runCatching { startActivity(browserIntent) }
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/$username/")))
+            }
         }
     }
 
@@ -791,64 +739,25 @@ class MainActivity : AppCompatActivity() {
             } else {
                 buildString {
                     append(result.message)
-                    if (result.stderr.isNotBlank()) {
-                        append('\n')
-                        append(result.stderr)
-                    } else if (result.stdout.isNotBlank()) {
-                        append('\n')
-                        append(result.stdout)
-                    }
+                    if (result.stderr.isNotBlank()) { append('\n'); append(result.stderr) }
+                    else if (result.stdout.isNotBlank()) { append('\n'); append(result.stdout) }
                 }
             }
-            binding.testResult.setTextColor(
-                color(if (result.success) R.color.status_success else R.color.status_error)
-            )
-            if (result.success) {
-                densityViewModel.recordExternalReset()
-            } else {
-                showMessage(result.message)
-            }
+            binding.testResult.setTextColor(color(if (result.success) R.color.status_success else R.color.status_error))
+            if (result.success) densityViewModel.recordExternalReset() else showMessage(result.message)
         }
     }
 
     private fun setTestRunning(running: Boolean) {
         binding.buttonTest.isEnabled = !running
-        binding.buttonTest.text = getString(
-            if (running) R.string.testing_density_reset else R.string.test_density_reset
-        )
+        binding.buttonTest.text = getString(if (running) R.string.testing_density_reset else R.string.test_density_reset)
         binding.testProgress.visibility = if (running) View.VISIBLE else View.GONE
     }
 
     private fun renderShizukuState(state: ShizukuManager.State) {
-        setStatus(
-            binding.statusInstallation,
-            getString(R.string.label_installation),
-            getString(
-                if (state.installed) R.string.status_installed
-                else R.string.status_not_installed
-            ),
-            if (state.installed) R.color.status_success else R.color.status_error
-        )
-
-        setStatus(
-            binding.statusShizukuService,
-            getString(R.string.label_shizuku_service),
-            getString(
-                if (state.running) R.string.status_started
-                else R.string.status_stopped
-            ),
-            if (state.running) R.color.status_success else R.color.status_warning
-        )
-
-        setStatus(
-            binding.statusPermission,
-            getString(R.string.label_permission),
-            getString(
-                if (state.permissionGranted) R.string.status_permission_granted
-                else R.string.status_permission_denied
-            ),
-            if (state.permissionGranted) R.color.status_success else R.color.status_warning
-        )
+        setStatus(binding.statusInstallation, getString(R.string.label_installation), getString(if (state.installed) R.string.status_installed else R.string.status_not_installed), if (state.installed) R.color.status_success else R.color.status_error)
+        setStatus(binding.statusShizukuService, getString(R.string.label_shizuku_service), getString(if (state.running) R.string.status_started else R.string.status_stopped), if (state.running) R.color.status_success else R.color.status_warning)
+        setStatus(binding.statusPermission, getString(R.string.label_permission), getString(if (state.permissionGranted) R.string.status_permission_granted else R.string.status_permission_denied), if (state.permissionGranted) R.color.status_success else R.color.status_warning)
 
         val userServiceText = when {
             state.userServiceConnected -> R.string.status_user_service_connected
@@ -860,63 +769,33 @@ class MainActivity : AppCompatActivity() {
             state.bindingInProgress -> R.color.status_warning
             else -> R.color.status_error
         }
-        setStatus(
-            binding.statusUserService,
-            getString(R.string.label_user_service),
-            getString(userServiceText),
-            userServiceColor
-        )
+        setStatus(binding.statusUserService, getString(R.string.label_user_service), getString(userServiceText), userServiceColor)
 
         binding.shizukuDiagnostics.text = ShizukuManager.buildDiagnosticText(state)
         binding.buttonRequestPermission.isEnabled = state.running && !state.permissionGranted
         binding.buttonOpenShizuku.isEnabled = state.installed
-        binding.buttonReconnectUserService.isEnabled =
-            state.running && state.permissionGranted && !state.bindingInProgress
+        binding.buttonReconnectUserService.isEnabled = state.running && state.permissionGranted && !state.bindingInProgress
     }
 
     private fun renderAccessibilityState() {
         val enabled = isAccessibilityEnabled()
-        setStatus(
-            binding.statusAccessibility,
-            getString(R.string.label_accessibility),
-            getString(
-                if (enabled) R.string.status_accessibility_enabled
-                else R.string.status_accessibility_disabled
-            ),
-            if (enabled) R.color.status_success else R.color.status_error
-        )
+        setStatus(binding.statusAccessibility, getString(R.string.label_accessibility), getString(if (enabled) R.string.status_accessibility_enabled else R.string.status_accessibility_disabled), if (enabled) R.color.status_success else R.color.status_error)
     }
 
     private fun isAccessibilityEnabled(): Boolean =
-        AccessibilityUtils.isServiceEnabled(
-            this,
-            VolumeShortcutAccessibilityService::class.java
-        )
+        AccessibilityUtils.isServiceEnabled(this, VolumeShortcutAccessibilityService::class.java)
 
-    private fun setStatus(
-        view: TextView,
-        label: String,
-        value: String,
-        @ColorRes colorRes: Int
-    ) {
+    private fun setStatus(view: TextView, label: String, value: String, @ColorRes colorRes: Int) {
         view.text = getString(R.string.status_line_format, label, value)
         view.setTextColor(color(colorRes))
     }
 
-    private fun color(@ColorRes colorRes: Int): Int =
-        ContextCompat.getColor(this, colorRes)
-
-    private fun showMessage(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
-    private fun showSnackbar(message: String) {
-        Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show()
-    }
+    private fun color(@ColorRes colorRes: Int): Int = ContextCompat.getColor(this, colorRes)
+    private fun showMessage(message: String) { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+    private fun showSnackbar(message: String) { Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show() }
 
     private companion object {
         const val ULTRA_CONFIRM_HOLD_MILLIS = 1_500L
-
         val PREPARING_STEPS = setOf(
             SessionStep.VALIDATING,
             SessionStep.SAVING_DENSITY,
@@ -925,7 +804,6 @@ class MainActivity : AppCompatActivity() {
             SessionStep.VERIFYING_DENSITY,
             SessionStep.OPENING_GAME
         )
-
         val BUSY_SESSION_STEPS = PREPARING_STEPS + setOf(
             SessionStep.SESSION_ACTIVE,
             SessionStep.RESTORING_DENSITY

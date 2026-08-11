@@ -26,7 +26,8 @@ data class GameLauncherGameUiState(
     val game: SupportedGame,
     val applicationName: String,
     val packageName: String,
-    val icon: android.graphics.drawable.Drawable?,
+    val versionCode: Long,
+    val lastUpdateTime: Long,
     val installed: Boolean,
     val enabled: Boolean,
     val selectedProfile: DensityPreset,
@@ -216,7 +217,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
                 game = game,
                 applicationName = info.applicationName,
                 packageName = info.packageName,
-                icon = info.icon,
+                versionCode = info.versionCode,
+                lastUpdateTime = info.lastUpdateTime,
                 installed = info.installed,
                 enabled = isGameEnabled(game),
                 selectedProfile = profile,
@@ -248,7 +250,9 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
 
     fun isPresetEnabled(preset: DensityPreset): Boolean = when (preset) {
         DensityPreset.ULTRA -> config.ultraEnabled
+        DensityPreset.VERY_HIGH -> config.veryHighEnabled
         DensityPreset.HIGH -> config.highEnabled
+        DensityPreset.MEDIUM_HIGH -> config.mediumHighEnabled
         DensityPreset.LOW -> config.lowEnabled
     }
 

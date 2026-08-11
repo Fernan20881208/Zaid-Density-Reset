@@ -256,7 +256,9 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun isPresetEnabled(preset: DensityPreset): Boolean = when (preset) {
         DensityPreset.ULTRA -> remoteConfig.ultraEnabled
+        DensityPreset.VERY_HIGH -> remoteConfig.veryHighEnabled
         DensityPreset.HIGH -> remoteConfig.highEnabled
+        DensityPreset.MEDIUM_HIGH -> remoteConfig.mediumHighEnabled
         DensityPreset.LOW -> remoteConfig.lowEnabled
     }
 

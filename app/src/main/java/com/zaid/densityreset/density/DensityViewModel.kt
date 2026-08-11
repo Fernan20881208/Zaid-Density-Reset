@@ -3,6 +3,7 @@ package com.zaid.densityreset.density
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zaid.densityreset.icons.DensityIconInvalidationCoordinator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -137,8 +138,15 @@ class DensityViewModel(application: Application) : AndroidViewModel(application)
     fun recordExternalReset() {
         viewModelScope.launch {
             operationMutex.withLock {
+                val previousDensity = _uiState.value.currentDensity
                 controller.getSystemState()
                     .onSuccess { verified ->
+                        DensityIconInvalidationCoordinator.onDensityChanged(
+                            context = getApplication(),
+                            previousDensity = previousDensity ?: verified.currentDensity,
+                            expectedDensity = verified.currentDensity,
+                            hasOverride = verified.hasOverride
+                        )
                         val changedAt = System.currentTimeMillis()
                         if (!verified.hasOverride) {
                             repository.saveReset(verified, changedAt)

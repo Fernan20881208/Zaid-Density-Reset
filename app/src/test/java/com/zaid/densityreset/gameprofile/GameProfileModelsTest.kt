@@ -21,12 +21,22 @@ class GameProfileModelsTest {
 
     @Test
     fun densityPresetsUseExactValues() {
-        assertEquals(20, DensityPreset.ULTRA.density)
-        assertEquals("Escala extrema", DensityPreset.ULTRA.description)
-        assertEquals(72, DensityPreset.HIGH.density)
-        assertEquals("Escala competitiva", DensityPreset.HIGH.description)
+        assertEquals(5, DensityPreset.entries.size)
+
         assertEquals(280, DensityPreset.LOW.density)
         assertEquals("Escala equilibrada", DensityPreset.LOW.description)
+
+        assertEquals(176, DensityPreset.MEDIUM_HIGH.density)
+        assertEquals("Sensibilidad media-alta", DensityPreset.MEDIUM_HIGH.description)
+
+        assertEquals(72, DensityPreset.HIGH.density)
+        assertEquals("Sensibilidad alta", DensityPreset.HIGH.description)
+
+        assertEquals(46, DensityPreset.VERY_HIGH.density)
+        assertEquals("Sensibilidad muy alta", DensityPreset.VERY_HIGH.description)
+
+        assertEquals(20, DensityPreset.ULTRA.density)
+        assertEquals("Sensibilidad extrema", DensityPreset.ULTRA.description)
     }
 
     @Test
