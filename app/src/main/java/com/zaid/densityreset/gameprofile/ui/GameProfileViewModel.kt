@@ -12,6 +12,8 @@ import com.zaid.densityreset.gameprofile.domain.GameSessionState
 import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
+import com.zaid.densityreset.remoteconfig.RemoteAppConfig
+import com.zaid.densityreset.remoteconfig.RemoteConfigManager
 import com.zaid.densityreset.shizuku.ShizukuManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -44,6 +46,7 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
     private var localSelectedPreset: DensityPreset? = null
     private var localStartRequested = false
     private var recoveryRequested = false
+    private var remoteConfig = RemoteConfigManager.currentConfig()
 
     private val shizukuListener: (ShizukuManager.State) -> Unit = { state ->
         rebuildState(
@@ -54,6 +57,13 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
     init {
         ShizukuManager.addStateListener(shizukuListener)
         refreshEnvironment()
+
+        viewModelScope.launch {
+            RemoteConfigManager.config.collect { config ->
+                remoteConfig = config
+                rebuildState()
+            }
+        }
 
         viewModelScope.launch {
             repository.state.collect { state ->
@@ -95,6 +105,10 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
 
     fun selectGame(game: SupportedGame) {
         if (isOperationLocked()) return
+        if (!isGameEnabled(game)) {
+            _events.tryEmit("${game.displayName} está temporalmente no disponible.")
+            return
+        }
         val installed = _uiState.value.installedGames
         if (game !in installed) {
             _events.tryEmit("Este juego no está instalado.")
@@ -106,6 +120,10 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
 
     fun selectPreset(preset: DensityPreset) {
         if (isOperationLocked()) return
+        if (!isPresetEnabled(preset)) {
+            _events.tryEmit("${preset.displayName} está temporalmente no disponible.")
+            return
+        }
         localSelectedPreset = preset
         rebuildState()
     }
@@ -120,6 +138,14 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
         }
         if (preset == null) {
             _events.tryEmit("Selecciona un perfil.")
+            return
+        }
+        if (!isGameEnabled(game)) {
+            _events.tryEmit("${game.displayName} está temporalmente no disponible.")
+            return
+        }
+        if (!isPresetEnabled(preset)) {
+            _events.tryEmit("${preset.displayName} está temporalmente no disponible.")
             return
         }
         if (!state.canStart) {
@@ -216,9 +242,22 @@ class GameProfileViewModel(application: Application) : AndroidViewModel(applicat
             canStart = selectedGame != null &&
                 selectedPreset != null &&
                 selectedGame in installedGames &&
+                isGameEnabled(selectedGame) &&
+                isPresetEnabled(selectedPreset) &&
                 shizukuReady &&
                 !operationLocked
         )
+    }
+
+    private fun isGameEnabled(game: SupportedGame): Boolean = when (game) {
+        SupportedGame.FREE_FIRE -> remoteConfig.freeFireEnabled
+        SupportedGame.FREE_FIRE_MAX -> remoteConfig.freeFireMaxEnabled
+    }
+
+    private fun isPresetEnabled(preset: DensityPreset): Boolean = when (preset) {
+        DensityPreset.ULTRA -> remoteConfig.ultraEnabled
+        DensityPreset.HIGH -> remoteConfig.highEnabled
+        DensityPreset.LOW -> remoteConfig.lowEnabled
     }
 
     private fun isOperationLocked(): Boolean =
