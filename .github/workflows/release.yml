@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: density-reset-release
@@ -64,31 +65,55 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validar firma persistente
+      - name: Obtener firma persistente con GitHub OIDC
         if: steps.status.outputs.skip != 'true'
         env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_ENDPOINT: https://zzlvupunploglgxbgllm.supabase.co/functions/v1/release-signing
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE_B64" || { echo "Falta ANDROID_KEYSTORE_BASE64"; exit 1; }
-          test -n "$STORE_PASSWORD" || { echo "Falta ANDROID_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "Falta ANDROID_KEY_ALIAS"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "Falta ANDROID_KEY_PASSWORD"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub OIDC no está disponible"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "Falta token para GitHub OIDC"; exit 1; }
+
+          OIDC_RESPONSE="$(curl --fail --silent --show-error --location \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=density-reset-release")"
+          OIDC_TOKEN="$(jq -er '.value' <<< "$OIDC_RESPONSE")"
+
+          BUNDLE="$(curl --fail --silent --show-error --location \
+            --request POST \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "$SIGNING_ENDPOINT")"
+          jq -e '.success == true' <<< "$BUNDLE" >/dev/null
+
+          KEYSTORE_B64="$(jq -er '.keystore_base64' <<< "$BUNDLE")"
+          STORE_PASSWORD="$(jq -er '.store_password' <<< "$BUNDLE")"
+          KEY_ALIAS="$(jq -er '.key_alias' <<< "$BUNDLE")"
+          KEY_PASSWORD="$(jq -er '.key_password' <<< "$BUNDLE")"
+          EXPECTED_CERT_SHA256="$(jq -er '.cert_sha256' <<< "$BUNDLE" | tr '[:upper:]' '[:lower:]')"
+
+          test "${#EXPECTED_CERT_SHA256}" -eq 64
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_ALIAS"
+          echo "::add-mask::$KEY_PASSWORD"
+
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/density-reset.keystore"
           test -s "$RUNNER_TEMP/density-reset.keystore"
-          echo "Firma release persistente disponible."
+
+          {
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/density-reset.keystore"
+            echo "ANDROID_KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$KEY_PASSWORD"
+            echo "EXPECTED_CERT_SHA256=$EXPECTED_CERT_SHA256"
+          } >> "$GITHUB_ENV"
+
+          unset KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD BUNDLE OIDC_TOKEN OIDC_RESPONSE
+          echo "Firma Android persistente obtenida mediante OIDC."
 
       - name: Compilar y probar Release firmada
         if: steps.status.outputs.skip != 'true'
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/density-reset.keystore
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
@@ -112,8 +137,12 @@ jobs:
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           SIGNER_INFO="$("$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK")"
           printf '%s\n' "$SIGNER_INFO"
-          CERT_SHA256="$(printf '%s\n' "$SIGNER_INFO" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p; s/^V2 Signer: certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]')"
+          CERT_SHA256="$(printf '%s\n' "$SIGNER_INFO" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p; s/^V2 Signer: certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
           test "${#CERT_SHA256}" -eq 64
+          test "$CERT_SHA256" = "$EXPECTED_CERT_SHA256" || {
+            echo "El certificado del APK no coincide con la firma persistente esperada."
+            exit 1
+          }
 
           SHA256="$(sha256sum "$APK" | awk '{print $1}')"
           test "${#SHA256}" -eq 64
@@ -143,8 +172,8 @@ jobs:
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             TAG_SHA="$(git rev-list -n 1 "$TAG")"
             test "$TAG_SHA" = "$GITHUB_SHA" || {
-              echo "El tag $TAG ya existe pero apunta a $TAG_SHA, no a $GITHUB_SHA";
-              exit 1;
+              echo "El tag $TAG ya existe pero apunta a $TAG_SHA, no a $GITHUB_SHA"
+              exit 1
             }
           else
             git tag "$TAG" "$GITHUB_SHA"
@@ -203,5 +232,5 @@ jobs:
             echo "- Signing certificate SHA-256: \`${CERT_SHA256}\`"
             echo "- Assets: APK + update.json"
             echo "- mandatory=true, minVersionCode=${VERSION_CODE}"
-            echo "- signing mode: persistent release keystore"
+            echo "- signing mode: Supabase Vault + GitHub OIDC"
           } >> "$GITHUB_STEP_SUMMARY"
