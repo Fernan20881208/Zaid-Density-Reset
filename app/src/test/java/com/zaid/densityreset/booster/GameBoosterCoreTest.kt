@@ -11,15 +11,26 @@ import kotlin.math.abs
 class GameBoosterCoreTest {
 
     @Test
-    fun exposesExactlyThreeBoosterModes() {
+    fun exposesExactlyFourBoosterModes() {
         assertEquals(
             listOf(
                 BoosterMode.GAME,
                 BoosterMode.BATTERY,
-                BoosterMode.MAX_PERFORMANCE
+                BoosterMode.MAX_PERFORMANCE,
+                BoosterMode.ULTRA_MAX_PERFORMANCE
             ),
             BoosterMode.entries
         )
+    }
+
+    @Test
+    fun recognizesOfficialFixedPerformanceCommand() {
+        assertTrue(
+            containsFixedPerformanceModeCommand(
+                "set-fixed-performance-mode-enabled [true|false]\n"
+            )
+        )
+        assertFalse(containsFixedPerformanceModeCommand("Power manager commands: help"))
     }
 
     @Test
