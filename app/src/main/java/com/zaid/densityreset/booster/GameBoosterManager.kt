@@ -1,6 +1,7 @@
 package com.zaid.densityreset.booster
 
 import android.content.Context
+import android.os.Build
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -34,6 +35,7 @@ class GameBoosterManager(
     private val detector = DeviceProfileDetector(commandExecutor)
     private val snapshotStore = BoosterSnapshotStore(appContext)
     private val performanceMonitor = GamePerformanceMonitor(appContext, commandExecutor)
+    private val overlayController = GameStatsOverlayController(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var activeAdapter: RomGameAdapter? = null
@@ -57,7 +59,9 @@ class GameBoosterManager(
         val profile = detector.detect()
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(packageName)
         val adapter = createAdapter(profile, packageName, diagnostic, config)
-        val capabilities = adapter.detectCapabilities()
+        val capabilities = adapter.detectCapabilities().copy(
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+        )
         var snapshot = BoosterSnapshot(
             packageName = packageName,
             romFamily = profile.romFamily,
@@ -68,7 +72,8 @@ class GameBoosterManager(
             startedAt = System.currentTimeMillis(),
             selectedMode = mode,
             vendor = profile.vendor,
-            gameModeChanged = false
+            gameModeChanged = false,
+            fixedPerformanceModeChanged = false
         )
 
         activeAdapter = adapter
@@ -86,54 +91,162 @@ class GameBoosterManager(
         val modeEnabled = config.gameBoosterEnabled && when (mode) {
             BoosterMode.GAME -> config.gameModeEnabled
             BoosterMode.BATTERY -> config.batteryModeEnabled
-            BoosterMode.MAX_PERFORMANCE -> config.maxPerformanceEnabled
+            BoosterMode.MAX_PERFORMANCE,
+            BoosterMode.ULTRA_MAX_PERFORMANCE -> config.maxPerformanceEnabled
         }
 
         var modeApplied = false
         var modeFailure: String? = null
         if (modeEnabled) {
-            val result = when (mode) {
-                BoosterMode.GAME -> adapter.applyGameMode(packageName)
-                BoosterMode.BATTERY -> adapter.applyBatteryMode(packageName)
-                BoosterMode.MAX_PERFORMANCE -> adapter.applyPerformanceMode(packageName)
-            }
-            result.fold(
-                onSuccess = {
-                    modeApplied = true
-                    snapshot = snapshot.copy(gameModeChanged = true)
-                    snapshotStore.save(snapshot)
-                    actions += BoosterAction(
-                        name = "Game Mode",
-                        detail = mode.commandModeLabel(),
-                        applied = true
+            if (mode == BoosterMode.ULTRA_MAX_PERFORMANCE) {
+                var performanceGameModeApplied = false
+                if (capabilities.performanceModeAvailable) {
+                    adapter.applyPerformanceMode(packageName).fold(
+                        onSuccess = {
+                            performanceGameModeApplied = true
+                            snapshot = snapshot.copy(gameModeChanged = true)
+                            snapshotStore.save(snapshot)
+                            actions += BoosterAction(
+                                name = "Game Mode",
+                                detail = "Performance · parte del modo benchmark",
+                                applied = true
+                            )
+                        },
+                        onFailure = { error ->
+                            actions += BoosterAction(
+                                name = "Game Mode",
+                                detail = error.message ?: "Performance no disponible.",
+                                applied = false
+                            )
+                        }
                     )
-                },
-                onFailure = { error ->
-                    modeFailure = error.message ?: "Game Booster no disponible en este dispositivo."
+                } else {
                     actions += BoosterAction(
                         name = "Game Mode",
-                        detail = modeFailure.orEmpty(),
+                        detail = "Performance no está disponible para este juego.",
                         applied = false
                     )
                 }
-            )
+
+                val fixedResult = if (capabilities.fixedPerformanceModeAvailable) {
+                    setFixedPerformanceMode(enabled = true)
+                } else {
+                    Result.failure(
+                        IllegalStateException("Fixed Performance Mode no está disponible en este dispositivo.")
+                    )
+                }
+
+                fixedResult.fold(
+                    onSuccess = {
+                        modeApplied = true
+                        snapshot = snapshot.copy(fixedPerformanceModeChanged = true)
+                        snapshotStore.save(snapshot)
+                        actions += BoosterAction(
+                            name = "Modo benchmark",
+                            detail = "Fixed Performance Mode activo",
+                            applied = true
+                        )
+                    },
+                    onFailure = { error ->
+                        modeFailure = error.message ?: "No se pudo activar el modo benchmark."
+                        actions += BoosterAction(
+                            name = "Modo benchmark",
+                            detail = modeFailure.orEmpty(),
+                            applied = false
+                        )
+                    }
+                )
+
+                if (!modeApplied && performanceGameModeApplied) {
+                    val rollback = adapter.restore(snapshot)
+                    if (rollback.isSuccess) {
+                        snapshot = snapshot.copy(gameModeChanged = false)
+                        snapshotStore.save(snapshot)
+                        actions += BoosterAction(
+                            name = "Restauración preventiva",
+                            detail = "Game Mode volvió al valor anterior porque el modo benchmark no pudo activarse.",
+                            applied = true
+                        )
+                    } else {
+                        actions += BoosterAction(
+                            name = "Restauración preventiva",
+                            detail = rollback.exceptionOrNull()?.message
+                                ?: "Game Mode requiere restauración al terminar la sesión.",
+                            applied = false
+                        )
+                    }
+                }
+            } else {
+                val result = when (mode) {
+                    BoosterMode.GAME -> adapter.applyGameMode(packageName)
+                    BoosterMode.BATTERY -> adapter.applyBatteryMode(packageName)
+                    BoosterMode.MAX_PERFORMANCE -> adapter.applyPerformanceMode(packageName)
+                    BoosterMode.ULTRA_MAX_PERFORMANCE -> error("Handled above")
+                }
+                result.fold(
+                    onSuccess = {
+                        modeApplied = true
+                        snapshot = snapshot.copy(gameModeChanged = true)
+                        snapshotStore.save(snapshot)
+                        actions += BoosterAction(
+                            name = "Game Mode",
+                            detail = mode.commandModeLabel(),
+                            applied = true
+                        )
+                    },
+                    onFailure = { error ->
+                        modeFailure = error.message ?: "Game Booster no disponible en este dispositivo."
+                        actions += BoosterAction(
+                            name = "Game Mode",
+                            detail = modeFailure.orEmpty(),
+                            applied = false
+                        )
+                    }
+                )
+            }
         } else {
             modeFailure = "Este modo está desactivado por configuración remota."
             actions += BoosterAction("Game Mode", modeFailure.orEmpty(), false)
         }
 
-        val flags = monitorFlags(config)
-        performanceMonitor.start(packageName, flags, capabilities)
-        val monitorActions = monitorActions(flags, capabilities)
-        actions += monitorActions
+        val requestedFlags = monitorFlags(config)
+        var hasMonitorWork = false
+        if (requestedFlags.anyEnabled()) {
+            if (overlayController.canDraw()) {
+                performanceMonitor.start(packageName, requestedFlags, capabilities)
+                val monitorActions = monitorActions(requestedFlags, capabilities)
+                actions += monitorActions
+                hasMonitorWork = monitorActions.any { it.applied }
+                if (hasMonitorWork) {
+                    val overlayStarted = overlayController.start()
+                    actions += BoosterAction(
+                        name = "Overlay HUD",
+                        detail = if (overlayStarted) {
+                            "FPS, RAM, batería y temperatura sobre el juego"
+                        } else {
+                            "Android rechazó la ventana flotante."
+                        },
+                        applied = overlayStarted
+                    )
+                    if (!overlayStarted) {
+                        performanceMonitor.stop()
+                        hasMonitorWork = false
+                    }
+                }
+            } else {
+                actions += BoosterAction(
+                    name = "Overlay HUD",
+                    detail = "Falta el permiso Mostrar sobre otras apps.",
+                    applied = false
+                )
+            }
+        }
 
-        val hasMonitorWork = monitorActions.any { it.applied }
-        val active = modeApplied || hasMonitorWork
+        val hasTemporaryWork = snapshot.gameModeChanged || snapshot.fixedPerformanceModeChanged
+        val active = modeApplied || hasTemporaryWork || hasMonitorWork
         if (!active) {
-            // A diagnostic-only result is not an active booster session. Do not
-            // leave a snapshot that would keep the foreground service alive
-            // after the fixed 20-second DPI reset.
             performanceMonitor.stop()
+            overlayController.stop()
             snapshotStore.clear()
             activeAdapter = null
         }
@@ -173,13 +286,31 @@ class GameBoosterManager(
         } else {
             configuredAdapter
         }
-        val capabilities = configuredAdapter.detectCapabilities()
+        val capabilities = configuredAdapter.detectCapabilities().copy(
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+        )
 
-        // A Remote Config change is allowed to disable future optimizations, but
-        // it must never remove the path needed to undo a change already made.
         activeAdapter = restorationAdapter
         activeProfile = profile
-        performanceMonitor.start(snapshot.packageName, monitorFlags(config), capabilities)
+
+        val requestedFlags = monitorFlags(config)
+        var hasMonitorWork = false
+        if (requestedFlags.anyEnabled() && overlayController.canDraw()) {
+            performanceMonitor.start(snapshot.packageName, requestedFlags, capabilities)
+            hasMonitorWork = monitorActions(requestedFlags, capabilities).any { it.applied }
+            if (hasMonitorWork && !overlayController.start()) {
+                performanceMonitor.stop()
+                hasMonitorWork = false
+            }
+        }
+
+        val hasTemporaryWork = snapshot.gameModeChanged || snapshot.fixedPerformanceModeChanged
+        if (!hasTemporaryWork && !hasMonitorWork) {
+            snapshotStore.clear()
+            clearRuntime()
+            return false
+        }
+
         GameBoosterRuntime.mutableState.value = GameBoosterState(
             active = true,
             mode = snapshot.selectedMode,
@@ -191,6 +322,12 @@ class GameBoosterManager(
                 add(BoosterAction("Perfil ROM", profile.adapterDisplayName, true))
                 if (snapshot.gameModeChanged && snapshot.previousGameMode != null) {
                     add(BoosterAction("Game Mode", "Cambio temporal recuperado", true))
+                }
+                if (snapshot.fixedPerformanceModeChanged) {
+                    add(BoosterAction("Modo benchmark", "Fixed Performance pendiente de restauración", true))
+                }
+                if (hasMonitorWork) {
+                    add(BoosterAction("Overlay HUD", "Monitor flotante recuperado", true))
                 }
                 add(BoosterAction("Sesión", "Recuperada sin prolongar cambios temporales", true))
             },
@@ -204,7 +341,9 @@ class GameBoosterManager(
         val profile = detector.detect()
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(packageName)
         val adapter = createAdapter(profile, packageName, diagnostic, config)
-        val capabilities = adapter.detectCapabilities()
+        val capabilities = adapter.detectCapabilities().copy(
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+        )
         val current = GameBoosterRuntime.mutableState.value
         val diagnosed = current.copy(
             rom = profile.romFamily,
@@ -217,29 +356,44 @@ class GameBoosterManager(
     }
 
     override suspend fun restore(): BoosterResult {
+        overlayController.stop()
         performanceMonitor.stop()
-        val snapshot = snapshotStore.read()
+        var snapshot = snapshotStore.read()
         if (snapshot == null) {
             clearRuntime()
             return BoosterResult.Success("Game Booster restaurado.")
         }
 
-        val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(snapshot.packageName)
-        val adapter = if (snapshot.gameModeChanged) {
-            activeAdapter ?: createRestorationAdapter(snapshot, diagnostic)
-        } else {
-            activeAdapter
+        val failures = mutableListOf<String>()
+
+        if (snapshot.fixedPerformanceModeChanged) {
+            val fixedRestore = setFixedPerformanceMode(enabled = false)
+            if (fixedRestore.isSuccess) {
+                snapshot = snapshot.copy(fixedPerformanceModeChanged = false)
+                snapshotStore.save(snapshot)
+            } else {
+                failures += fixedRestore.exceptionOrNull()?.message
+                    ?: "No se pudo desactivar Fixed Performance Mode."
+            }
         }
 
         if (snapshot.gameModeChanged) {
-            val restored = (adapter ?: createRestorationAdapter(snapshot, diagnostic))
-                .restore(snapshot)
-            if (restored.isFailure) {
-                val message = restored.exceptionOrNull()?.message
+            val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(snapshot.packageName)
+            val adapter = activeAdapter ?: createRestorationAdapter(snapshot, diagnostic)
+            val restored = adapter.restore(snapshot)
+            if (restored.isSuccess) {
+                snapshot = snapshot.copy(gameModeChanged = false)
+                snapshotStore.save(snapshot)
+            } else {
+                failures += restored.exceptionOrNull()?.message
                     ?: "No se pudo restaurar Game Mode."
-                GameBoosterRuntime.mutableState.update { it.copy(message = message) }
-                return BoosterResult.Failure(message)
             }
+        }
+
+        if (failures.isNotEmpty()) {
+            val message = failures.joinToString(" ")
+            GameBoosterRuntime.mutableState.update { it.copy(message = message) }
+            return BoosterResult.Failure(message)
         }
 
         snapshotStore.clear()
@@ -252,11 +406,13 @@ class GameBoosterManager(
     suspend fun hasSnapshot(): Boolean = snapshotStore.read() != null
 
     fun close() {
+        overlayController.close()
         performanceMonitor.close()
         scope.cancel()
     }
 
     private fun clearRuntime() {
+        overlayController.stop()
         activeAdapter = null
         activeProfile = null
         GameBoosterRuntime.mutableState.value = GameBoosterState()
@@ -288,6 +444,53 @@ class GameBoosterManager(
         romFamily = snapshot.romFamily
     )
 
+    private suspend fun detectFixedPerformanceModeCommand(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+        val result = commandExecutor.execute(
+            arrayOf("/system/bin/cmd", "power", "help"),
+            timeoutSeconds = 5L
+        ).getOrNull() ?: return false
+        if (!result.isSuccess) return false
+        return containsFixedPerformanceModeCommand(
+            listOf(result.stdout, result.stderr).joinToString("\n")
+        )
+    }
+
+    private suspend fun setFixedPerformanceMode(enabled: Boolean): Result<Unit> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return Result.failure(
+                IllegalStateException("Fixed Performance Mode requiere Android 11 o posterior.")
+            )
+        }
+        val result = commandExecutor.execute(
+            arrayOf(
+                "/system/bin/cmd",
+                "power",
+                "set-fixed-performance-mode-enabled",
+                enabled.toString()
+            ),
+            timeoutSeconds = 6L
+        ).getOrElse { return Result.failure(it) }
+
+        return if (result.isSuccess) {
+            Result.success(Unit)
+        } else {
+            Result.failure(
+                IllegalStateException(
+                    result.stderr.ifBlank {
+                        result.stdout.ifBlank {
+                            if (enabled) {
+                                "El Power HAL no aceptó Fixed Performance Mode."
+                            } else {
+                                "El Power HAL no confirmó la restauración de Fixed Performance Mode."
+                            }
+                        }
+                    }
+                )
+            )
+        }
+    }
+
     private fun monitorFlags(config: RemoteAppConfig): MonitorFlags = MonitorFlags(
         ram = config.ramMonitorEnabled,
         battery = config.batteryMonitorEnabled,
@@ -300,16 +503,16 @@ class GameBoosterManager(
         capabilities: BoosterCapabilities
     ): List<BoosterAction> = buildList {
         if (flags.ram) {
-            add(BoosterAction("Monitor RAM", if (capabilities.memoryMonitoringAvailable) "Activo" else "No disponible", capabilities.memoryMonitoringAvailable))
+            add(BoosterAction("Monitor RAM", if (capabilities.memoryMonitoringAvailable) "Overlay activo" else "No disponible", capabilities.memoryMonitoringAvailable))
         }
         if (flags.battery) {
-            add(BoosterAction("Monitor batería", "Activo", true))
+            add(BoosterAction("Monitor batería", "Overlay activo", true))
         }
         if (flags.thermal) {
-            add(BoosterAction("Monitor térmico", if (capabilities.thermalMonitoringAvailable) "Activo" else "No disponible", capabilities.thermalMonitoringAvailable))
+            add(BoosterAction("Monitor térmico", if (capabilities.thermalMonitoringAvailable) "Overlay activo" else "No disponible", capabilities.thermalMonitoringAvailable))
         }
         if (flags.fps) {
-            add(BoosterAction("Monitor FPS", if (capabilities.fpsMonitoringAvailable) "gfxinfo framestats" else "No disponible en este dispositivo", capabilities.fpsMonitoringAvailable))
+            add(BoosterAction("Monitor FPS", if (capabilities.fpsMonitoringAvailable) "gfxinfo framestats · overlay" else "No disponible en este dispositivo", capabilities.fpsMonitoringAvailable))
         }
     }
 }
@@ -322,6 +525,7 @@ private class BoosterSnapshotStore(private val context: Context) {
             prefs[Keys.vendor] = snapshot.vendor.name
             prefs[Keys.startedAt] = snapshot.startedAt
             prefs[Keys.gameModeChanged] = snapshot.gameModeChanged
+            prefs[Keys.fixedPerformanceModeChanged] = snapshot.fixedPerformanceModeChanged
             snapshot.previousGameMode?.let { prefs[Keys.previousGameMode] = it }
                 ?: prefs.remove(Keys.previousGameMode)
             snapshot.selectedMode?.let { prefs[Keys.selectedMode] = it.name }
@@ -352,7 +556,8 @@ private class BoosterSnapshotStore(private val context: Context) {
             vendor = prefs[Keys.vendor]
                 ?.let { runCatching { DeviceVendor.valueOf(it) }.getOrNull() }
                 ?: DeviceVendor.GENERIC,
-            gameModeChanged = prefs[Keys.gameModeChanged] ?: false
+            gameModeChanged = prefs[Keys.gameModeChanged] ?: false,
+            fixedPerformanceModeChanged = prefs[Keys.fixedPerformanceModeChanged] ?: false
         )
     }
 
@@ -369,6 +574,7 @@ private class BoosterSnapshotStore(private val context: Context) {
         val selectedMode = stringPreferencesKey("selected_mode")
         val startedAt = longPreferencesKey("started_at")
         val gameModeChanged = booleanPreferencesKey("game_mode_changed")
+        val fixedPerformanceModeChanged = booleanPreferencesKey("fixed_performance_mode_changed")
     }
 }
 
@@ -376,8 +582,14 @@ private val Context.boosterSnapshotDataStore by preferencesDataStore(
     name = "game_booster_snapshot"
 )
 
+internal fun containsFixedPerformanceModeCommand(output: String): Boolean =
+    output.contains("set-fixed-performance-mode-enabled", ignoreCase = true)
+
+private fun MonitorFlags.anyEnabled(): Boolean = ram || battery || thermal || fps
+
 private fun BoosterMode.commandModeLabel(): String = when (this) {
     BoosterMode.GAME -> "Standard"
     BoosterMode.BATTERY -> "Battery"
     BoosterMode.MAX_PERFORMANCE -> "Performance"
+    BoosterMode.ULTRA_MAX_PERFORMANCE -> "Performance + Fixed Performance"
 }
