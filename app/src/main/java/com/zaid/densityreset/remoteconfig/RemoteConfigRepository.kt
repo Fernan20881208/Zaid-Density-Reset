@@ -109,12 +109,24 @@ class RemoteConfigRepositoryImpl(context: Context) : RemoteConfigRepository {
             highDensity = json.optInt("sensi_high_density", 72),
             mediumHighDensity = json.optInt("sensi_medium_high_density", 176),
             lowDensity = json.optInt("sensi_low_density", 280),
-            gameSessionDurationSeconds = json.optInt("game_session_duration_seconds", 30),
+            gameSessionDurationSeconds = json.optInt("game_session_duration_seconds", 20),
             announcementEnabled = json.optBoolean("announcement_enabled", false),
             announcementTitle = json.optNullableString("announcement_title"),
             announcementMessage = json.optNullableString("announcement_message"),
             quickTileEnabled = json.optBoolean("quick_tile_enabled", true),
             githubUpdatesEnabled = json.optBoolean("github_updates_enabled", true),
+            gameBoosterEnabled = json.optBoolean("game_booster_enabled", true),
+            gameModeEnabled = json.optBoolean("game_mode_enabled", true),
+            batteryModeEnabled = json.optBoolean("battery_mode_enabled", true),
+            maxPerformanceEnabled = json.optBoolean("max_performance_enabled", true),
+            ramMonitorEnabled = json.optBoolean("ram_monitor_enabled", true),
+            batteryMonitorEnabled = json.optBoolean("battery_monitor_enabled", true),
+            thermalMonitorEnabled = json.optBoolean("thermal_monitor_enabled", true),
+            fpsMonitorEnabled = json.optBoolean("fps_monitor_enabled", true),
+            xiaomiAdapterEnabled = json.optBoolean("xiaomi_adapter_enabled", true),
+            samsungAdapterEnabled = json.optBoolean("samsung_adapter_enabled", true),
+            oplusAdapterEnabled = json.optBoolean("oplus_adapter_enabled", true),
+            aospAdapterEnabled = json.optBoolean("aosp_adapter_enabled", true),
             blockedVersionCodes = blocked
         )
     }
@@ -159,6 +171,18 @@ private class RemoteConfigStorage(private val context: Context) {
             putNullable(preferences, Keys.announcementMessage, safe.announcementMessage)
             preferences[Keys.quickTileEnabled] = safe.quickTileEnabled
             preferences[Keys.githubUpdatesEnabled] = safe.githubUpdatesEnabled
+            preferences[Keys.gameBoosterEnabled] = safe.gameBoosterEnabled
+            preferences[Keys.gameModeEnabled] = safe.gameModeEnabled
+            preferences[Keys.batteryModeEnabled] = safe.batteryModeEnabled
+            preferences[Keys.maxPerformanceEnabled] = safe.maxPerformanceEnabled
+            preferences[Keys.ramMonitorEnabled] = safe.ramMonitorEnabled
+            preferences[Keys.batteryMonitorEnabled] = safe.batteryMonitorEnabled
+            preferences[Keys.thermalMonitorEnabled] = safe.thermalMonitorEnabled
+            preferences[Keys.fpsMonitorEnabled] = safe.fpsMonitorEnabled
+            preferences[Keys.xiaomiAdapterEnabled] = safe.xiaomiAdapterEnabled
+            preferences[Keys.samsungAdapterEnabled] = safe.samsungAdapterEnabled
+            preferences[Keys.oplusAdapterEnabled] = safe.oplusAdapterEnabled
+            preferences[Keys.aospAdapterEnabled] = safe.aospAdapterEnabled
             preferences[Keys.blockedVersionCodes] = safe.blockedVersionCodes
                 .sorted()
                 .joinToString(",")
@@ -200,6 +224,18 @@ private class RemoteConfigStorage(private val context: Context) {
             quickTileEnabled = preferences[Keys.quickTileEnabled] ?: fallback.quickTileEnabled,
             githubUpdatesEnabled = preferences[Keys.githubUpdatesEnabled]
                 ?: fallback.githubUpdatesEnabled,
+            gameBoosterEnabled = preferences[Keys.gameBoosterEnabled] ?: fallback.gameBoosterEnabled,
+            gameModeEnabled = preferences[Keys.gameModeEnabled] ?: fallback.gameModeEnabled,
+            batteryModeEnabled = preferences[Keys.batteryModeEnabled] ?: fallback.batteryModeEnabled,
+            maxPerformanceEnabled = preferences[Keys.maxPerformanceEnabled] ?: fallback.maxPerformanceEnabled,
+            ramMonitorEnabled = preferences[Keys.ramMonitorEnabled] ?: fallback.ramMonitorEnabled,
+            batteryMonitorEnabled = preferences[Keys.batteryMonitorEnabled] ?: fallback.batteryMonitorEnabled,
+            thermalMonitorEnabled = preferences[Keys.thermalMonitorEnabled] ?: fallback.thermalMonitorEnabled,
+            fpsMonitorEnabled = preferences[Keys.fpsMonitorEnabled] ?: fallback.fpsMonitorEnabled,
+            xiaomiAdapterEnabled = preferences[Keys.xiaomiAdapterEnabled] ?: fallback.xiaomiAdapterEnabled,
+            samsungAdapterEnabled = preferences[Keys.samsungAdapterEnabled] ?: fallback.samsungAdapterEnabled,
+            oplusAdapterEnabled = preferences[Keys.oplusAdapterEnabled] ?: fallback.oplusAdapterEnabled,
+            aospAdapterEnabled = preferences[Keys.aospAdapterEnabled] ?: fallback.aospAdapterEnabled,
             blockedVersionCodes = blocked
         ).validated()
         return RemoteConfigCache(
@@ -243,6 +279,18 @@ private class RemoteConfigStorage(private val context: Context) {
         val announcementMessage = stringPreferencesKey("announcement_message")
         val quickTileEnabled = booleanPreferencesKey("quick_tile_enabled")
         val githubUpdatesEnabled = booleanPreferencesKey("github_updates_enabled")
+        val gameBoosterEnabled = booleanPreferencesKey("game_booster_enabled")
+        val gameModeEnabled = booleanPreferencesKey("game_mode_enabled")
+        val batteryModeEnabled = booleanPreferencesKey("battery_mode_enabled")
+        val maxPerformanceEnabled = booleanPreferencesKey("max_performance_enabled")
+        val ramMonitorEnabled = booleanPreferencesKey("ram_monitor_enabled")
+        val batteryMonitorEnabled = booleanPreferencesKey("battery_monitor_enabled")
+        val thermalMonitorEnabled = booleanPreferencesKey("thermal_monitor_enabled")
+        val fpsMonitorEnabled = booleanPreferencesKey("fps_monitor_enabled")
+        val xiaomiAdapterEnabled = booleanPreferencesKey("xiaomi_adapter_enabled")
+        val samsungAdapterEnabled = booleanPreferencesKey("samsung_adapter_enabled")
+        val oplusAdapterEnabled = booleanPreferencesKey("oplus_adapter_enabled")
+        val aospAdapterEnabled = booleanPreferencesKey("aosp_adapter_enabled")
         val blockedVersionCodes = stringPreferencesKey("blocked_version_codes")
     }
 }
