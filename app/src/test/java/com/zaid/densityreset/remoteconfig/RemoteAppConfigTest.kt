@@ -28,17 +28,17 @@ class RemoteAppConfigTest {
         assertEquals(72, invalid.highDensity)
         assertEquals(176, invalid.mediumHighDensity)
         assertEquals(280, invalid.lowDensity)
-        assertEquals(30, invalid.gameSessionDurationSeconds)
+        assertEquals(20, invalid.gameSessionDurationSeconds)
         assertEquals(setOf(11L, 13L), invalid.blockedVersionCodes)
     }
 
     @Test
-    fun sessionDurationAboveShortServiceSafetyBudgetFallsBack() {
+    fun sessionDurationAboveConfiguredRangeFallsBack() {
         val invalid = RemoteAppConfig.DEFAULT.copy(
             gameSessionDurationSeconds = RemoteAppConfig.MAX_SESSION_SECONDS + 1
         ).validated()
 
-        assertEquals(30, invalid.gameSessionDurationSeconds)
+        assertEquals(20, invalid.gameSessionDurationSeconds)
     }
 
     @Test
