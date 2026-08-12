@@ -1,0 +1,43 @@
+name: Retirar Release v1.6.0
+
+on:
+  push:
+    branches:
+      - ops/remove-v160-release
+    paths:
+      - .github/workflows/remove-v160-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remove-release:
+    name: Eliminar Release y tag v1.6.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Eliminar v1.6.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.6.0
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          else
+            echo "La Release $TAG ya no existe."
+            refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" --jq 'length')"
+            if [ "$refs" != "0" ]; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"
+            fi
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La Release $TAG sigue existiendo."
+            exit 1
+          fi
+
+          refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" --jq 'length')"
+          test "$refs" = "0"
+          echo "Release y tag $TAG eliminados correctamente."
