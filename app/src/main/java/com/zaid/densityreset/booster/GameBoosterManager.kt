@@ -158,10 +158,17 @@ class GameBoosterManager(
         val config = RemoteConfigManager.currentConfig()
         val profile = detector.detect()
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(snapshot.packageName)
-        val adapter = createAdapter(profile, snapshot.packageName, diagnostic, config)
-        val capabilities = adapter.detectCapabilities()
+        val configuredAdapter = createAdapter(profile, snapshot.packageName, diagnostic, config)
+        val restorationAdapter = if (snapshot.gameModeChanged) {
+            createRestorationAdapter(snapshot, diagnostic)
+        } else {
+            configuredAdapter
+        }
+        val capabilities = configuredAdapter.detectCapabilities()
 
-        activeAdapter = adapter
+        // A Remote Config change is allowed to disable future optimizations, but
+        // it must never remove the path needed to undo a change already made.
+        activeAdapter = restorationAdapter
         activeProfile = profile
         performanceMonitor.start(snapshot.packageName, monitorFlags(config), capabilities)
         GameBoosterRuntime.mutableState.value = GameBoosterState(
@@ -208,18 +215,16 @@ class GameBoosterManager(
             return BoosterResult.Success("Game Booster restaurado.")
         }
 
-        val config = RemoteConfigManager.currentConfig()
-        val profile = activeProfile ?: detector.detect()
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(snapshot.packageName)
-        val adapter = activeAdapter ?: createAdapter(
-            profile,
-            snapshot.packageName,
-            diagnostic,
-            config
-        )
+        val adapter = if (snapshot.gameModeChanged) {
+            activeAdapter ?: createRestorationAdapter(snapshot, diagnostic)
+        } else {
+            activeAdapter
+        }
 
         if (snapshot.gameModeChanged) {
-            val restored = adapter.restore(snapshot)
+            val restored = (adapter ?: createRestorationAdapter(snapshot, diagnostic))
+                .restore(snapshot)
             if (restored.isFailure) {
                 val message = restored.exceptionOrNull()?.message
                     ?: "No se pudo restaurar Game Mode."
@@ -262,6 +267,16 @@ class GameBoosterManager(
         samsungEnabled = config.samsungAdapterEnabled,
         oplusEnabled = config.oplusAdapterEnabled,
         aospEnabled = config.aospAdapterEnabled
+    )
+
+    private fun createRestorationAdapter(
+        snapshot: BoosterSnapshot,
+        diagnostic: GameModeDiagnostic
+    ): RomGameAdapter = AospRomAdapter(
+        packageName = snapshot.packageName,
+        commandExecutor = commandExecutor,
+        diagnostic = diagnostic,
+        romFamily = snapshot.romFamily
     )
 
     private fun monitorFlags(config: RemoteAppConfig): MonitorFlags = MonitorFlags(
