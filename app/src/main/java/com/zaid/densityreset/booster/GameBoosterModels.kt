@@ -21,6 +21,11 @@ enum class BoosterMode(
         displayName = "Máximo rendimiento",
         shortDescription = "Más rendimiento",
         userDescription = "Prioriza la fluidez. Puede consumir más batería y generar más temperatura."
+    ),
+    ULTRA_MAX_PERFORMANCE(
+        displayName = "Ultra máximo rendimiento",
+        shortDescription = "Modo benchmark",
+        userDescription = "Combina el modo Performance del juego con Fixed Performance Mode cuando Android lo admite. Está pensado para pruebas de rendimiento y puede generar más temperatura."
     )
 }
 
@@ -80,6 +85,7 @@ data class BoosterCapabilities(
     val standardModeAvailable: Boolean = false,
     val performanceModeAvailable: Boolean = false,
     val batteryModeAvailable: Boolean = false,
+    val fixedPerformanceModeAvailable: Boolean = false,
     val fpsMonitoringAvailable: Boolean = false,
     val thermalMonitoringAvailable: Boolean = false,
     val memoryMonitoringAvailable: Boolean = false,
@@ -94,7 +100,8 @@ data class BoosterSnapshot(
     val startedAt: Long,
     val selectedMode: BoosterMode? = null,
     val vendor: DeviceVendor = DeviceVendor.GENERIC,
-    val gameModeChanged: Boolean = false
+    val gameModeChanged: Boolean = false,
+    val fixedPerformanceModeChanged: Boolean = false
 )
 
 data class BoosterAction(
