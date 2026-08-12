@@ -17,7 +17,7 @@ interface RomGameAdapter {
     suspend fun restore(snapshot: BoosterSnapshot): Result<Unit>
 }
 
-internal data class GameModeDiagnostic(
+data class GameModeDiagnostic(
     val gameManagerAvailable: Boolean,
     val currentMode: String?,
     val availableModes: Set<String>,
@@ -56,16 +56,15 @@ internal class GameModeCapabilityProbe(
             }
         }
 
-        // This only checks that the gfxinfo framestats backend itself is callable.
-        // Real frame data may not exist until the game has rendered frames; the
-        // runtime FPS monitor validates every sample and keeps FPS unavailable
-        // instead of inventing a fallback value.
+        // A stopped game may legitimately make gfxinfo say that no process is
+        // running. A successful dumpsys invocation still proves the backend is
+        // callable; real frame validity is decided later by ShellFpsMonitor.
         val fpsBackendAvailable = commandExecutor.execute(
             arrayOf("/system/bin/dumpsys", "gfxinfo", packageName, "framestats"),
             timeoutSeconds = COMMAND_TIMEOUT_SECONDS
         ).getOrNull()?.let { result ->
             result.isSuccess &&
-                !result.stdout.contains("no process found", ignoreCase = true) &&
+                !result.stderr.contains("unknown command", ignoreCase = true) &&
                 !result.stderr.contains("not found", ignoreCase = true)
         } ?: false
 
