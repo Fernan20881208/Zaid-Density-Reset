@@ -1,6 +1,7 @@
 package com.zaid.densityreset.gameprofile.domain
 
 import android.content.Context
+import com.zaid.densityreset.booster.BoosterMode
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.data.GameSessionRepository
 import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
@@ -11,7 +12,8 @@ import com.zaid.densityreset.shizuku.ShizukuManager
 interface GameSessionController {
     suspend fun startSession(
         game: SupportedGame,
-        preset: DensityPreset
+        preset: DensityPreset,
+        boosterMode: BoosterMode? = null
     ): GameSessionResult
 
     suspend fun restoreNow(): GameSessionResult
@@ -31,12 +33,13 @@ class GameSessionControllerImpl(
 
     override suspend fun startSession(
         game: SupportedGame,
-        preset: DensityPreset
+        preset: DensityPreset,
+        boosterMode: BoosterMode?
     ): GameSessionResult {
         val current = repository.read()
         if (current.sessionActive) {
             return GameSessionResult.Failure(
-                "Ya existe una sesión de DPI activa."
+                "Ya existe una sesión de juego activa."
             )
         }
 
@@ -56,7 +59,8 @@ class GameSessionControllerImpl(
             DpiGameSessionService.startSession(
                 context = appContext,
                 game = game,
-                preset = preset
+                preset = preset,
+                boosterMode = boosterMode
             )
             GameSessionResult.Success("Preparando sesión…")
         }.getOrElse { error ->
@@ -72,7 +76,7 @@ class GameSessionControllerImpl(
             return GameSessionResult.Failure("No existe una sesión activa.")
         }
         DpiGameSessionService.restoreNow(appContext)
-        return GameSessionResult.Success("Restaurando DPI…")
+        return GameSessionResult.Success("Restaurando sesión…")
     }
 
     override suspend fun recoverPendingSession(): GameSessionResult {
