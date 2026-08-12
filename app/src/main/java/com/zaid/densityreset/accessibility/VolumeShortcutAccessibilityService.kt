@@ -52,7 +52,6 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
 
     private var foregroundPackage: String? = null
     private var gameLockJob: Job? = null
-    private var gameExitJob: Job? = null
 
     private val sessionChangedListener: () -> Unit = {
         serviceScope.launch {
@@ -142,7 +141,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             val activeSession = gameSessionRepository.read().sessionActive
             if (activeSession) {
-                cancelGameLockJobs()
+                stopGameLock()
                 DpiGameSessionService.restoreNow(
                     context = this@VolumeShortcutAccessibilityService,
                     source = DpiGameSessionService.RESTORE_SOURCE_VOLUME
@@ -150,7 +149,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
                 vibrateBriefly()
                 Toast.makeText(
                     this@VolumeShortcutAccessibilityService,
-                    "Restaurando el DPI anterior…",
+                    "Restaurando DPI y Game Booster…",
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
@@ -197,7 +196,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
             selectedGame == null ||
             targetDensity == null
         ) {
-            cancelGameLockJobs()
+            stopGameLock()
             return
         }
 
@@ -210,16 +209,13 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
             }
         }
 
-        when {
-            activePackage == selectedGame.packageName -> {
-                gameExitJob?.cancel()
-                gameExitJob = null
-                startGameLockGuard()
-            }
-
-            activePackage.isNullOrBlank() || isTransientPackage(activePackage) -> Unit
-
-            else -> scheduleGameExitRestore()
+        if (activePackage == selectedGame.packageName) {
+            startGameLockGuard()
+        } else if (!activePackage.isNullOrBlank() && !isTransientPackage(activePackage)) {
+            // The foreground service is the single authority for deciding when
+            // the game session really ended. Accessibility only stops locking
+            // DPI when another non-transient package is in front.
+            stopGameLock()
         }
     }
 
@@ -255,46 +251,9 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun scheduleGameExitRestore() {
+    private fun stopGameLock() {
         gameLockJob?.cancel()
         gameLockJob = null
-        gameExitJob?.cancel()
-
-        gameExitJob = serviceScope.launch {
-            delay(GAME_EXIT_GRACE_MILLIS)
-
-            val session = gameSessionRepository.read()
-            val selectedGame = session.selectedGame ?: return@launch
-            if (
-                !session.sessionActive ||
-                session.currentStep != SessionStep.SESSION_ACTIVE
-            ) {
-                return@launch
-            }
-
-            val currentPackage = foregroundPackage
-                ?: gameController.foregroundPackage().getOrNull()
-
-            if (
-                currentPackage != selectedGame.packageName &&
-                !currentPackage.isNullOrBlank() &&
-                !isTransientPackage(currentPackage)
-            ) {
-                DpiGameSessionService.restoreNow(
-                    context = this@VolumeShortcutAccessibilityService,
-                    source = DpiGameSessionService.RESTORE_SOURCE_GAME_EXIT
-                )
-            } else {
-                synchronizeGameLock(resolveForeground = currentPackage.isNullOrBlank())
-            }
-        }
-    }
-
-    private fun cancelGameLockJobs() {
-        gameLockJob?.cancel()
-        gameLockJob = null
-        gameExitJob?.cancel()
-        gameExitJob = null
     }
 
     private fun isTransientPackage(packageName: String?): Boolean =
@@ -356,7 +315,7 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         DpiGameLockBridge.detach()
         resetGestureState()
-        cancelGameLockJobs()
+        stopGameLock()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -365,7 +324,6 @@ class VolumeShortcutAccessibilityService : AccessibilityService() {
         const val GESTURE_DURATION_MILLIS = 2_000L
         const val SUCCESS_VIBRATION_MILLIS = 60L
         const val DPI_LOCK_CHECK_INTERVAL_MILLIS = 1_200L
-        const val GAME_EXIT_GRACE_MILLIS = 1_250L
 
         val TRANSIENT_PACKAGES = setOf(
             "com.android.systemui",

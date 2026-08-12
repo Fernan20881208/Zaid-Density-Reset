@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.zaid.densityreset.booster.BoosterMode
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,7 @@ interface GameLauncherRepository {
     fun observePreferences(): Flow<Map<SupportedGame, GameLauncherPreference>>
     suspend fun setLastProfile(game: SupportedGame, preset: DensityPreset)
     suspend fun setDefaultProfile(game: SupportedGame, preset: DensityPreset?)
+    suspend fun setBoosterMode(game: SupportedGame, mode: BoosterMode)
 }
 
 data class InstalledGameInfo(
@@ -29,7 +31,8 @@ data class InstalledGameInfo(
 
 data class GameLauncherPreference(
     val lastProfile: DensityPreset? = null,
-    val defaultProfile: DensityPreset? = null
+    val defaultProfile: DensityPreset? = null,
+    val boosterMode: BoosterMode = BoosterMode.GAME
 )
 
 class GameLauncherRepositoryImpl(context: Context) : GameLauncherRepository {
@@ -73,7 +76,9 @@ class GameLauncherRepositoryImpl(context: Context) : GameLauncherRepository {
             SupportedGame.entries.associateWith { game ->
                 GameLauncherPreference(
                     lastProfile = preferences[lastKey(game)].toPreset(),
-                    defaultProfile = preferences[defaultKey(game)].toPreset()
+                    defaultProfile = preferences[defaultKey(game)].toPreset(),
+                    boosterMode = preferences[boosterKey(game)].toBoosterMode()
+                        ?: BoosterMode.GAME
                 )
             }
         }
@@ -94,15 +99,28 @@ class GameLauncherRepositoryImpl(context: Context) : GameLauncherRepository {
         }
     }
 
+    override suspend fun setBoosterMode(game: SupportedGame, mode: BoosterMode) {
+        appContext.gameLauncherDataStore.edit { preferences ->
+            preferences[boosterKey(game)] = mode.name
+        }
+    }
+
     private fun lastKey(game: SupportedGame): Preferences.Key<String> =
         stringPreferencesKey("${game.name.lowercase()}_last_profile")
 
     private fun defaultKey(game: SupportedGame): Preferences.Key<String> =
         stringPreferencesKey("${game.name.lowercase()}_default_profile")
+
+    private fun boosterKey(game: SupportedGame): Preferences.Key<String> =
+        stringPreferencesKey("${game.name.lowercase()}_booster_mode")
 }
 
 private val Context.gameLauncherDataStore by preferencesDataStore(name = "game_launcher")
 
 private fun String?.toPreset(): DensityPreset? = this?.let { name ->
     runCatching { DensityPreset.valueOf(name) }.getOrNull()
+}
+
+private fun String?.toBoosterMode(): BoosterMode? = this?.let { name ->
+    runCatching { BoosterMode.valueOf(name) }.getOrNull()
 }

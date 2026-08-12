@@ -53,7 +53,7 @@ Deno.serve(async (request) => {
 async function readConfig() {
   const { data, error } = await service
     .from("app_config")
-    .select("maintenance_mode,maintenance_message,min_supported_version_code,latest_version_code,force_update,free_fire_enabled,free_fire_max_enabled,sensi_ultra_enabled,sensi_very_high_enabled,sensi_high_enabled,sensi_medium_high_enabled,sensi_low_enabled,sensi_ultra_density,sensi_very_high_density,sensi_high_density,sensi_medium_high_density,sensi_low_density,game_session_duration_seconds,announcement_enabled,announcement_title,announcement_message,quick_tile_enabled,github_updates_enabled,blocked_version_codes,updated_at")
+    .select("maintenance_mode,maintenance_message,min_supported_version_code,latest_version_code,force_update,free_fire_enabled,free_fire_max_enabled,sensi_ultra_enabled,sensi_very_high_enabled,sensi_high_enabled,sensi_medium_high_enabled,sensi_low_enabled,sensi_ultra_density,sensi_very_high_density,sensi_high_density,sensi_medium_high_density,sensi_low_density,game_session_duration_seconds,announcement_enabled,announcement_title,announcement_message,quick_tile_enabled,github_updates_enabled,game_booster_enabled,game_mode_enabled,battery_mode_enabled,max_performance_enabled,ram_monitor_enabled,battery_monitor_enabled,thermal_monitor_enabled,fps_monitor_enabled,xiaomi_adapter_enabled,samsung_adapter_enabled,oplus_adapter_enabled,aosp_adapter_enabled,blocked_version_codes,updated_at")
     .eq("singleton", true)
     .single();
   if (error || !data) throw error ?? new Error("config missing");
@@ -111,6 +111,18 @@ function sanitizePatch(input: Record<string, unknown>): Record<string, unknown> 
   copyText(input, result, "announcement_message", 2000, true);
   copyBoolean(input, result, "quick_tile_enabled");
   copyBoolean(input, result, "github_updates_enabled");
+  copyBoolean(input, result, "game_booster_enabled");
+  copyBoolean(input, result, "game_mode_enabled");
+  copyBoolean(input, result, "battery_mode_enabled");
+  copyBoolean(input, result, "max_performance_enabled");
+  copyBoolean(input, result, "ram_monitor_enabled");
+  copyBoolean(input, result, "battery_monitor_enabled");
+  copyBoolean(input, result, "thermal_monitor_enabled");
+  copyBoolean(input, result, "fps_monitor_enabled");
+  copyBoolean(input, result, "xiaomi_adapter_enabled");
+  copyBoolean(input, result, "samsung_adapter_enabled");
+  copyBoolean(input, result, "oplus_adapter_enabled");
+  copyBoolean(input, result, "aosp_adapter_enabled");
 
   if (Object.hasOwn(input, "blocked_version_codes")) {
     if (!Array.isArray(input.blocked_version_codes)) throw new Error("invalid blocked versions");

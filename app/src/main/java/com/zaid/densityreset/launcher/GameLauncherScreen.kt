@@ -57,19 +57,31 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.zaid.densityreset.booster.BatteryInfo
+import com.zaid.densityreset.booster.BoosterMode
+import com.zaid.densityreset.booster.GameBoosterState
+import com.zaid.densityreset.booster.RamInfo
+import com.zaid.densityreset.booster.RamLevel
+import com.zaid.densityreset.booster.ThermalInfo
+import com.zaid.densityreset.booster.ThermalLevel
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.icons.AppIconRepositoryProvider
 import com.zaid.densityreset.icons.AppIconResult
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun GameLauncherScreen(
     state: GameLauncherUiState,
     isPresetEnabled: (DensityPreset) -> Boolean,
+    isBoosterModeEnabled: (BoosterMode) -> Boolean,
     onSelectProfile: (SupportedGame, DensityPreset) -> Unit,
+    onSelectBoosterMode: (SupportedGame, BoosterMode) -> Unit,
     onToggleDefault: (SupportedGame) -> Unit,
     onPlay: (SupportedGame) -> Unit,
     onRestore: () -> Unit,
+    onRedetectDevice: () -> Unit,
     onOpenLegacyControls: () -> Unit
 ) {
     Box(
@@ -103,7 +115,7 @@ fun GameLauncherScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Elige tu juego y perfil. La restauración utiliza el sistema de sesión existente.",
+                        "Elige el juego, sensibilidad y Game Booster. La app detecta automáticamente qué funciones admite tu dispositivo.",
                         color = Color(0xFFC6CFDD),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -130,19 +142,30 @@ fun GameLauncherScreen(
 
             if (state.session.sessionActive) {
                 item {
-                    GlassPanel(Modifier.padding(horizontal = 16.dp)) {
-                        Text("Sesión activa", color = Color(0xFF98F0BC), fontWeight = FontWeight.Bold)
-                        val game = state.session.selectedGame
-                        val preset = state.session.selectedPreset
-                        Text(
-                            listOfNotNull(
-                                game?.displayName,
-                                preset?.let { "${it.displayName} · ${state.session.targetDensity ?: it.density} DPI" }
-                            ).joinToString(" · "),
-                            color = Color.White
-                        )
-                        PrimaryButton("RESTAURAR DPI AHORA", true, onRestore)
-                    }
+                    ActiveSessionCard(
+                        state = state,
+                        onRestore = onRestore,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
+
+            if (state.session.sessionActive && state.booster.active) {
+                item {
+                    PerformanceCard(
+                        booster = state.booster,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
+
+            state.booster.deviceProfile?.let {
+                item {
+                    DeviceDiagnosticsCard(
+                        booster = state.booster,
+                        onRedetectDevice = onRedetectDevice,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
                 }
             }
 
@@ -150,8 +173,11 @@ fun GameLauncherScreen(
                 GameCard(
                     state = game,
                     busy = state.busy,
+                    boosterEnabled = state.boosterEnabled,
                     isPresetEnabled = isPresetEnabled,
+                    isBoosterModeEnabled = isBoosterModeEnabled,
                     onSelectProfile = { onSelectProfile(game.game, it) },
+                    onSelectBoosterMode = { onSelectBoosterMode(game.game, it) },
                     onToggleDefault = { onToggleDefault(game.game) },
                     onPlay = { onPlay(game.game) },
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -179,11 +205,268 @@ fun GameLauncherScreen(
 }
 
 @Composable
+private fun ActiveSessionCard(
+    state: GameLauncherUiState,
+    onRestore: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GlassPanel(modifier) {
+        Text("Sesión activa", color = Color(0xFF98F0BC), fontWeight = FontWeight.Bold)
+        val game = state.session.selectedGame
+        val preset = state.session.selectedPreset
+        val mode = state.booster.mode
+        Text(
+            listOfNotNull(
+                game?.displayName,
+                preset?.let { "${it.displayName} · ${state.session.targetDensity ?: it.density} DPI" },
+                mode?.displayName
+            ).joinToString(" · "),
+            color = Color.White
+        )
+        state.session.restoreAt?.let {
+            Text(
+                "El DPI vuelve a la normalidad automáticamente a los 20 segundos. El Game Booster continúa mientras juegas.",
+                color = Color(0xFFC6CFDD),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        PrimaryButton("RESTAURAR TODO AHORA", true, onRestore)
+    }
+}
+
+@Composable
+private fun PerformanceCard(
+    booster: GameBoosterState,
+    modifier: Modifier = Modifier
+) {
+    var selectedDetail by remember { mutableStateOf<String?>(null) }
+    val monitor = booster.monitor
+    val fps = monitor.fps?.fps
+    val ram = monitor.ram
+    val battery = monitor.battery
+    val thermal = monitor.thermal
+
+    GlassPanel(modifier) {
+        Text("Estado del juego", color = Color.White, fontWeight = FontWeight.Bold)
+        fps?.let {
+            val label = when {
+                it >= 55f -> "Fluido · Bien"
+                it >= 35f -> "Variable · Atención"
+                else -> "Bajo · Atención"
+            }
+            MetricRow("FPS", it.roundToInt().toString(), label) {
+                selectedDetail = if (selectedDetail == "fps") null else "fps"
+            }
+        } ?: MetricRow("FPS", "No disponible", "Sin datos válidos") {
+            selectedDetail = if (selectedDetail == "fps") null else "fps"
+        }
+
+        ram?.let {
+            MetricRow(
+                "RAM",
+                "${formatGiB(it.availableBytes)} GB libres",
+                ramStatus(it)
+            ) { selectedDetail = if (selectedDetail == "ram") null else "ram" }
+        }
+
+        battery?.let {
+            MetricRow(
+                "Batería",
+                "${it.percent}%",
+                if (it.charging) "Cargando" else if (it.percent <= 15) "Atención" else "Normal"
+            ) { selectedDetail = if (selectedDetail == "battery") null else "battery" }
+        }
+
+        thermal?.let {
+            MetricRow(
+                "Temperatura",
+                it.temperatureCelsius?.let { value -> "${value.roundToInt()}°C" }
+                    ?: it.level.displayName,
+                thermalStatus(it)
+            ) { selectedDetail = if (selectedDetail == "thermal") null else "thermal" }
+        }
+
+        selectedDetail?.let { metric ->
+            MetricDetail(metric, ram, battery, thermal, fps)
+        }
+
+        if (thermal?.level == ThermalLevel.VERY_HOT) {
+            Text(
+                "El teléfono está muy caliente. El rendimiento puede bajar para proteger el dispositivo.",
+                color = Color(0xFFFFD28E),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        } else if (
+            booster.mode == BoosterMode.MAX_PERFORMANCE &&
+            thermal?.level in setOf(ThermalLevel.WARM, ThermalLevel.HOT)
+        ) {
+            Text(
+                "El dispositivo está caliente. Android puede reducir el rendimiento para controlar la temperatura.",
+                color = Color(0xFFFFD28E),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetricRow(
+    label: String,
+    value: String,
+    status: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(label, modifier = Modifier.weight(1f), color = Color(0xFFC6CFDD))
+        Text(value, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text("● $status", color = statusColor(status), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun MetricDetail(
+    metric: String,
+    ram: RamInfo?,
+    battery: BatteryInfo?,
+    thermal: ThermalInfo?,
+    fps: Float?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0x55243D59), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        when (metric) {
+            "ram" -> ram?.let {
+                Text("Memoria disponible", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "${formatGiB(it.availableBytes)} GB de ${formatGiB(it.totalBytes)} GB",
+                    color = Color.White
+                )
+                Text(
+                    when (it.level) {
+                        RamLevel.EXCELLENT -> "El teléfono tiene suficiente memoria disponible para jugar."
+                        RamLevel.NORMAL -> "La memoria disponible es normal para continuar jugando."
+                        RamLevel.LOW -> "Queda poca memoria disponible. Android puede cerrar aplicaciones en segundo plano."
+                    },
+                    color = Color(0xFFC6CFDD)
+                )
+            }
+            "battery" -> battery?.let {
+                Text("Batería", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("${it.percent}% · ${if (it.charging) "Cargando" else "Descargando"}", color = Color.White)
+                it.consumedSinceStart?.let { consumed ->
+                    Text(
+                        "Inicio: ${it.startPercent ?: it.percent}% · Actual: ${it.percent}% · Consumo: $consumed%",
+                        color = Color(0xFFC6CFDD)
+                    )
+                }
+            }
+            "thermal" -> thermal?.let {
+                Text("Temperatura", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    it.temperatureCelsius?.let { value -> "${value.roundToInt()} °C · ${it.level.displayName}" }
+                        ?: "Estado térmico: ${it.level.displayName}",
+                    color = Color.White
+                )
+                Text(
+                    "Fuente: ${it.source.displayName}. ${thermalExplanation(it.level)}",
+                    color = Color(0xFFC6CFDD)
+                )
+            }
+            "fps" -> {
+                Text("FPS", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(fps?.roundToInt()?.toString() ?: "No disponible", color = Color.White)
+                Text(
+                    if (fps != null) {
+                        "Los FPS indican cuántas imágenes del juego se muestran por segundo."
+                    } else {
+                        "Este dispositivo o la ruta gráfica del juego no está entregando frames fiables a gfxinfo. No se sustituye el dato por los Hz de la pantalla."
+                    },
+                    color = Color(0xFFC6CFDD)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeviceDiagnosticsCard(
+    booster: GameBoosterState,
+    onRedetectDevice: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val profile = booster.deviceProfile ?: return
+    GlassPanel(modifier) {
+        Text("Dispositivo", color = Color.White, fontWeight = FontWeight.Bold)
+        Text(profile.brand.ifBlank { profile.manufacturer }, color = Color.White)
+        Text(profile.romDisplayName, color = Color(0xFF9DEAF4), fontWeight = FontWeight.SemiBold)
+        Text("Perfil: ${profile.adapterDisplayName}", color = Color(0xFFC6CFDD))
+        CapabilityLine("Game Mode", booster.capabilities.gameManagerAvailable)
+        CapabilityLine("Monitor FPS", booster.capabilities.fpsMonitoringAvailable)
+        CapabilityLine("Monitor térmico", booster.capabilities.thermalMonitoringAvailable)
+        CapabilityLine("Monitor RAM", booster.capabilities.memoryMonitoringAvailable)
+        if (booster.capabilities.vendorGameServiceAvailable) {
+            Text(
+                "✓ Servicio de juego del fabricante detectado (solo diagnóstico; no se ejecutan comandos OEM no verificados).",
+                color = Color(0xFF98F0BC),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        if (booster.actionsApplied.isNotEmpty()) {
+            Text("Optimizaciones activas", color = Color.White, fontWeight = FontWeight.SemiBold)
+            booster.actionsApplied.forEach { action ->
+                Text(
+                    "${if (action.applied) "✓" else "○"} ${action.name}: ${action.detail}",
+                    color = if (action.applied) Color(0xFFE8EDF5) else Color(0xFFC6CFDD),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        Button(
+            onClick = onRedetectDevice,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0x5C375374),
+                contentColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("VOLVER A DETECTAR DISPOSITIVO")
+        }
+    }
+}
+
+@Composable
+private fun CapabilityLine(name: String, available: Boolean) {
+    Text(
+        "$name: ${if (available) "Compatible" else "No disponible"}",
+        color = if (available) Color(0xFF98F0BC) else Color(0xFFC6CFDD),
+        style = MaterialTheme.typography.bodySmall
+    )
+}
+
+@Composable
 private fun GameCard(
     state: GameLauncherGameUiState,
     busy: Boolean,
+    boosterEnabled: Boolean,
     isPresetEnabled: (DensityPreset) -> Boolean,
+    isBoosterModeEnabled: (BoosterMode) -> Boolean,
     onSelectProfile: (DensityPreset) -> Unit,
+    onSelectBoosterMode: (BoosterMode) -> Unit,
     onToggleDefault: () -> Unit,
     onPlay: () -> Unit,
     modifier: Modifier = Modifier
@@ -270,6 +553,15 @@ private fun GameCard(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                    Text(
+                        if (boosterEnabled) {
+                            "Game Booster: ${state.boosterMode.displayName} · ${state.boosterMode.shortDescription}"
+                        } else {
+                            "Game Booster: desactivado temporalmente"
+                        },
+                        color = Color(0xFF9DEAF4),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     state.lastProfile?.let {
                         Text(
                             "Último usado: ${it.displayName} · ${it.density} DPI",
@@ -292,7 +584,8 @@ private fun GameCard(
                 enter = fadeIn(tween(180)),
                 exit = fadeOut(tween(120))
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Sensibilidad", color = Color.White, fontWeight = FontWeight.Bold)
                     DensityPreset.visualOrder.forEach { preset ->
                         ProfileRow(
                             preset = preset,
@@ -320,6 +613,35 @@ private fun GameCard(
                         color = Color(0xFF9DEAF4),
                         fontWeight = FontWeight.SemiBold
                     )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0x55243D59), RoundedCornerShape(20.dp))
+                            .border(1.dp, Color(0x55C8E5FF), RoundedCornerShape(20.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Game Booster", color = Color.White, fontWeight = FontWeight.Bold)
+                        if (!boosterEnabled) {
+                            Text(
+                                "Game Booster no disponible en este momento. El juego puede iniciarse normalmente.",
+                                color = Color(0xFFFFD28E),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        BoosterMode.entries.forEach { mode ->
+                            BoosterModeRow(
+                                mode = mode,
+                                selected = state.boosterMode == mode,
+                                enabled = isBoosterModeEnabled(mode) && !busy,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSelectBoosterMode(mode)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -330,6 +652,49 @@ private fun GameCard(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onPlay()
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoosterModeRow(
+    mode: BoosterMode,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) Color(0x84345B7B) else Color(0x42182A42))
+            .border(1.dp, if (selected) Color(0xD09DEAF4) else Color(0x50FFFFFF), shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            if (selected) "●" else "○",
+            color = if (selected) Color(0xFF9DEAF4) else Color(0xFFC6CFDD)
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                mode.displayName,
+                color = if (enabled) Color.White else Color(0x99FFFFFF),
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                mode.shortDescription,
+                color = Color(0xFF9DEAF4),
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                mode.userDescription,
+                color = if (enabled) Color(0xFFC6CFDD) else Color(0x80FFFFFF),
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
@@ -456,6 +821,39 @@ private fun profileWarning(preset: DensityPreset): String? = when (preset) {
         "Sensi Muy Alta utiliza una escala extremadamente reducida. Si tienes algún problema, puedes restaurar el DPI con ambos botones de volumen."
     else -> null
 }
+
+private fun ramStatus(ram: RamInfo): String = when (ram.level) {
+    RamLevel.EXCELLENT -> "Bien"
+    RamLevel.NORMAL -> "Normal"
+    RamLevel.LOW -> "Atención"
+}
+
+private fun thermalStatus(thermal: ThermalInfo): String = when (thermal.level) {
+    ThermalLevel.NORMAL -> "Bien"
+    ThermalLevel.WARM -> "Atención"
+    ThermalLevel.HOT, ThermalLevel.VERY_HOT -> "Alto"
+    ThermalLevel.UNKNOWN -> "No disponible"
+}
+
+private fun thermalExplanation(level: ThermalLevel): String = when (level) {
+    ThermalLevel.NORMAL -> "El teléfono está funcionando dentro de un rango normal."
+    ThermalLevel.WARM -> "El teléfono está templado; Android sigue administrando la temperatura."
+    ThermalLevel.HOT -> "El teléfono está caliente y Android puede reducir rendimiento para enfriarlo."
+    ThermalLevel.VERY_HOT -> "El teléfono está muy caliente. No se desactivan las protecciones térmicas."
+    ThermalLevel.UNKNOWN -> "No pudimos leer un estado térmico fiable, pero puedes seguir jugando."
+}
+
+private fun statusColor(status: String): Color = when {
+    status.contains("Alto", ignoreCase = true) ||
+        status.contains("Bajo", ignoreCase = true) ||
+        status.contains("Atención", ignoreCase = true) -> Color(0xFFFFD28E)
+    status.contains("No disponible", ignoreCase = true) ||
+        status.contains("Sin datos", ignoreCase = true) -> Color(0xFFC6CFDD)
+    else -> Color(0xFF98F0BC)
+}
+
+private fun formatGiB(bytes: Long): String =
+    String.format(Locale.US, "%.1f", bytes.toDouble() / 1_073_741_824.0)
 
 @Composable
 private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {

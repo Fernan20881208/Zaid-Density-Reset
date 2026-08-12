@@ -31,6 +31,8 @@ interface GameSessionRepository {
 
     suspend fun markSessionActive(restoreAt: Long?)
 
+    suspend fun markBoosterActive()
+
     suspend fun markRestorationFailure(message: String)
 
     suspend fun finishSession(message: String)
@@ -108,6 +110,16 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
             }
             preferences[GameSessionPreferenceKeys.currentSessionStep] =
                 SessionStep.SESSION_ACTIVE.name
+            preferences.remove(GameSessionPreferenceKeys.errorMessage)
+        }
+    }
+
+    override suspend fun markBoosterActive() {
+        appContext.gameSessionDataStore.edit { preferences ->
+            preferences[GameSessionPreferenceKeys.sessionActive] = true
+            preferences.remove(GameSessionPreferenceKeys.restoreAt)
+            preferences[GameSessionPreferenceKeys.currentSessionStep] =
+                SessionStep.BOOSTER_ACTIVE.name
             preferences.remove(GameSessionPreferenceKeys.errorMessage)
         }
     }
