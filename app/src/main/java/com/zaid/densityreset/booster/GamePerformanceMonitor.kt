@@ -80,8 +80,7 @@ class GamePerformanceMonitor(
         monitorJob = scope.launch {
             var tick = 0
             while (isActive) {
-                val current = _state.value
-                var next = current
+                var next = _state.value
                 if (flags.ram && capabilities.memoryMonitoringAvailable && tick % RAM_TICKS == 0) {
                     next = next.copy(ram = readRam())
                 }
@@ -115,18 +114,16 @@ class GamePerformanceMonitor(
         val memory = ActivityManager.MemoryInfo()
         manager.getMemoryInfo(memory)
         val total = memory.totalMem.takeIf { it > 0L } ?: return null
-        val ratio = memory.availMem.toDouble() / total.toDouble()
-        val level = when {
-            memory.lowMemory || ratio < LOW_RAM_RATIO -> RamLevel.LOW
-            ratio < NORMAL_RAM_RATIO -> RamLevel.NORMAL
-            else -> RamLevel.EXCELLENT
-        }
         return RamInfo(
             availableBytes = memory.availMem,
             totalBytes = total,
             lowMemory = memory.lowMemory,
             thresholdBytes = memory.threshold,
-            level = level
+            level = classifyRamLevel(
+                availableBytes = memory.availMem,
+                totalBytes = total,
+                lowMemory = memory.lowMemory
+            )
         )
     }
 
@@ -157,7 +154,7 @@ class GamePerformanceMonitor(
         val temperature = readBatteryTemperature()
         return ThermalInfo(
             temperatureCelsius = temperature,
-            level = thermalLevel(status),
+            level = mapThermalStatus(status),
             source = if (temperature != null) {
                 ThermalSource.BATTERY
             } else {
@@ -179,24 +176,11 @@ class GamePerformanceMonitor(
     private fun stickyBatteryIntent(): Intent? =
         appContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
-    private fun thermalLevel(status: Int): ThermalLevel = when (status) {
-        PowerManager.THERMAL_STATUS_NONE,
-        PowerManager.THERMAL_STATUS_LIGHT -> ThermalLevel.NORMAL
-        PowerManager.THERMAL_STATUS_MODERATE -> ThermalLevel.WARM
-        PowerManager.THERMAL_STATUS_SEVERE -> ThermalLevel.HOT
-        PowerManager.THERMAL_STATUS_CRITICAL,
-        PowerManager.THERMAL_STATUS_EMERGENCY,
-        PowerManager.THERMAL_STATUS_SHUTDOWN -> ThermalLevel.VERY_HOT
-        else -> ThermalLevel.UNKNOWN
-    }
-
     private companion object {
         const val BASE_TICK_MILLIS = 1_000L
         const val RAM_TICKS = 2
         const val BATTERY_TICKS = 5
         const val THERMAL_TICKS = 3
-        const val LOW_RAM_RATIO = 0.15
-        const val NORMAL_RAM_RATIO = 0.40
         const val MIN_PLAUSIBLE_BATTERY_C = -10f
         const val MAX_PLAUSIBLE_BATTERY_C = 80f
     }
@@ -225,9 +209,9 @@ private class ShellFpsMonitor(
                     calculateFpsFromFrameStats(
                         output = result.stdout,
                         previousLatestTimestamp = previousLatestTimestamp
-                    ).also { sample ->
-                        parseFrameTimestamps(result.stdout).lastOrNull()?.let {
-                            previousLatestTimestamp = it
+                    ).also {
+                        parseFrameTimestamps(result.stdout).lastOrNull()?.let { timestamp ->
+                            previousLatestTimestamp = timestamp
                         }
                     }
                 } else {
@@ -253,6 +237,31 @@ private class ShellFpsMonitor(
     }
 }
 
+internal fun classifyRamLevel(
+    availableBytes: Long,
+    totalBytes: Long,
+    lowMemory: Boolean
+): RamLevel {
+    if (totalBytes <= 0L) return RamLevel.LOW
+    val ratio = availableBytes.coerceAtLeast(0L).toDouble() / totalBytes.toDouble()
+    return when {
+        lowMemory || ratio < LOW_RAM_RATIO -> RamLevel.LOW
+        ratio < NORMAL_RAM_RATIO -> RamLevel.NORMAL
+        else -> RamLevel.EXCELLENT
+    }
+}
+
+internal fun mapThermalStatus(status: Int): ThermalLevel = when (status) {
+    PowerManager.THERMAL_STATUS_NONE,
+    PowerManager.THERMAL_STATUS_LIGHT -> ThermalLevel.NORMAL
+    PowerManager.THERMAL_STATUS_MODERATE -> ThermalLevel.WARM
+    PowerManager.THERMAL_STATUS_SEVERE -> ThermalLevel.HOT
+    PowerManager.THERMAL_STATUS_CRITICAL,
+    PowerManager.THERMAL_STATUS_EMERGENCY,
+    PowerManager.THERMAL_STATUS_SHUTDOWN -> ThermalLevel.VERY_HOT
+    else -> ThermalLevel.UNKNOWN
+}
+
 internal fun calculateFpsFromFrameStats(
     output: String,
     previousLatestTimestamp: Long?
@@ -275,7 +284,10 @@ internal fun calculateFpsFromFrameStats(
         return unavailableFps()
     }
 
-    val confidence = if (recent.size >= HIGH_CONFIDENCE_FRAMES && duration >= HIGH_CONFIDENCE_WINDOW_NANOS) {
+    val confidence = if (
+        recent.size >= HIGH_CONFIDENCE_FRAMES &&
+        duration >= HIGH_CONFIDENCE_WINDOW_NANOS
+    ) {
         FpsConfidence.HIGH
     } else {
         FpsConfidence.MEDIUM
@@ -324,6 +336,8 @@ internal fun unavailableFps(): FpsInfo = FpsInfo(
     source = FpsSource.UNAVAILABLE
 )
 
+private const val LOW_RAM_RATIO = 0.15
+private const val NORMAL_RAM_RATIO = 0.40
 private const val NANOS_PER_SECOND = 1_000_000_000.0
 private const val FPS_WINDOW_NANOS = 1_500_000_000L
 private const val MIN_WINDOW_NANOS = 250_000_000L
