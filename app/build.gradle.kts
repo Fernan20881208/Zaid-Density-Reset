@@ -28,8 +28,8 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.5.3"
+        versionCode = 16
+        versionName = "1.6.0"
 
         buildConfigField("String", "LICENSE_API_URL", "\"$licenseApiUrl\"")
         buildConfigField("long", "LICENSE_OFFLINE_GRACE_HOURS", "12L")
