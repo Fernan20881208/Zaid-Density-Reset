@@ -129,6 +129,15 @@ class GameBoosterManager(
 
         val hasMonitorWork = monitorActions.any { it.applied }
         val active = modeApplied || hasMonitorWork
+        if (!active) {
+            // A diagnostic-only result is not an active booster session. Do not
+            // leave a snapshot that would keep the foreground service alive
+            // after the fixed 20-second DPI reset.
+            performanceMonitor.stop()
+            snapshotStore.clear()
+            activeAdapter = null
+        }
+
         GameBoosterRuntime.mutableState.value = GameBoosterState(
             active = active,
             mode = mode,
@@ -137,11 +146,11 @@ class GameBoosterManager(
             deviceProfile = profile,
             capabilities = capabilities,
             actionsApplied = actions,
-            monitor = performanceMonitor.state.value,
+            monitor = if (active) performanceMonitor.state.value else GamePerformanceState(),
             message = modeFailure
         )
 
-        return if (modeApplied || hasMonitorWork) {
+        return if (active) {
             BoosterResult.Success(
                 if (modeApplied) "${mode.displayName} activado." else "Monitores del juego activos.",
                 actions
