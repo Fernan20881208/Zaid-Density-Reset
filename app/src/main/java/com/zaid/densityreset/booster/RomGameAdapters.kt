@@ -39,6 +39,7 @@ internal class GameModeCapabilityProbe(
             ?.let { listOf(it.stdout, it.stderr).joinToString("\n") }
             .orEmpty()
         val gameManagerAvailable = help.contains("game manager", ignoreCase = true) ||
+            help.contains("list-modes", ignoreCase = true) ||
             help.contains("mode", ignoreCase = true)
 
         var currentMode: String? = null
@@ -55,11 +56,17 @@ internal class GameModeCapabilityProbe(
             }
         }
 
+        // This only checks that the gfxinfo framestats backend itself is callable.
+        // Real frame data may not exist until the game has rendered frames; the
+        // runtime FPS monitor validates every sample and keeps FPS unavailable
+        // instead of inventing a fallback value.
         val fpsBackendAvailable = commandExecutor.execute(
             arrayOf("/system/bin/dumpsys", "gfxinfo", packageName, "framestats"),
             timeoutSeconds = COMMAND_TIMEOUT_SECONDS
         ).getOrNull()?.let { result ->
-            result.isSuccess && containsFrameStatsStructure(result.stdout)
+            result.isSuccess &&
+                !result.stdout.contains("no process found", ignoreCase = true) &&
+                !result.stderr.contains("not found", ignoreCase = true)
         } ?: false
 
         return GameModeDiagnostic(
@@ -84,9 +91,9 @@ abstract class BaseRomGameAdapter(
 
     override suspend fun detectCapabilities(): BoosterCapabilities = BoosterCapabilities(
         gameManagerAvailable = diagnostic.gameManagerAvailable && diagnostic.currentMode != null,
-        standardModeAvailable = diagnostic.supports(MODE_STANDARD),
-        performanceModeAvailable = diagnostic.supports(MODE_PERFORMANCE),
-        batteryModeAvailable = diagnostic.supports(MODE_BATTERY),
+        standardModeAvailable = diagnostic.currentMode != null && diagnostic.supports(MODE_STANDARD),
+        performanceModeAvailable = diagnostic.currentMode != null && diagnostic.supports(MODE_PERFORMANCE),
+        batteryModeAvailable = diagnostic.currentMode != null && diagnostic.supports(MODE_BATTERY),
         fpsMonitoringAvailable = diagnostic.fpsBackendAvailable,
         thermalMonitoringAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
         memoryMonitoringAvailable = true,
@@ -107,7 +114,9 @@ abstract class BaseRomGameAdapter(
             ?.trim()
             ?.lowercase()
             ?.takeIf { it in RESTORABLE_MODES }
-            ?: return Result.success(Unit)
+            ?: return Result.failure(
+                IllegalStateException("No se conoce el Game Mode anterior para restaurarlo.")
+            )
 
         if (!diagnostic.supports(previous) && previous != MODE_STANDARD) {
             return Result.failure(
@@ -227,6 +236,31 @@ class AospRomAdapter internal constructor(
     override val romFamily: RomFamily
 ) : BaseRomGameAdapter(packageName, commandExecutor, diagnostic)
 
+private class DisabledRomGameAdapter(
+    override val romFamily: RomFamily,
+    private val diagnostic: GameModeDiagnostic
+) : RomGameAdapter {
+    override suspend fun detectCapabilities(): BoosterCapabilities = BoosterCapabilities(
+        gameManagerAvailable = false,
+        standardModeAvailable = false,
+        performanceModeAvailable = false,
+        batteryModeAvailable = false,
+        fpsMonitoringAvailable = diagnostic.fpsBackendAvailable,
+        thermalMonitoringAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+        memoryMonitoringAvailable = true,
+        vendorGameServiceAvailable = false
+    )
+
+    override suspend fun applyGameMode(packageName: String): Result<Unit> = unavailable()
+    override suspend fun applyBatteryMode(packageName: String): Result<Unit> = unavailable()
+    override suspend fun applyPerformanceMode(packageName: String): Result<Unit> = unavailable()
+    override suspend fun restore(snapshot: BoosterSnapshot): Result<Unit> = Result.success(Unit)
+
+    private fun unavailable(): Result<Unit> = Result.failure(
+        IllegalStateException("El adaptador de Game Mode está desactivado por configuración remota.")
+    )
+}
+
 internal fun createRomGameAdapter(
     profile: DeviceProfile,
     packageName: String,
@@ -237,28 +271,29 @@ internal fun createRomGameAdapter(
     oplusEnabled: Boolean,
     aospEnabled: Boolean
 ): RomGameAdapter {
+    fun aospOrDisabled(): RomGameAdapter = if (aospEnabled) {
+        AospRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
+    } else {
+        DisabledRomGameAdapter(profile.romFamily, diagnostic)
+    }
+
     return when (profile.vendor) {
         DeviceVendor.XIAOMI -> if (xiaomiEnabled) {
             XiaomiRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
         } else {
-            AospRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
+            aospOrDisabled()
         }
         DeviceVendor.SAMSUNG -> if (samsungEnabled) {
             SamsungRomAdapter(packageName, commandExecutor, diagnostic)
         } else {
-            AospRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
+            aospOrDisabled()
         }
         DeviceVendor.OPLUS -> if (oplusEnabled) {
             OplusRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
         } else {
-            AospRomAdapter(packageName, commandExecutor, diagnostic, profile.romFamily)
+            aospOrDisabled()
         }
-        DeviceVendor.GENERIC -> AospRomAdapter(
-            packageName,
-            commandExecutor,
-            diagnostic,
-            if (aospEnabled) profile.romFamily else RomFamily.UNKNOWN
-        )
+        DeviceVendor.GENERIC -> aospOrDisabled()
     }
 }
 
