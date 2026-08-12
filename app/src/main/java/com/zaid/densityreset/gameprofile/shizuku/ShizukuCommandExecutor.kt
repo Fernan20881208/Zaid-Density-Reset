@@ -11,7 +11,7 @@ import java.io.InputStream
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.TimeUnit
 
-internal data class ShizukuCommandResult(
+data class ShizukuCommandResult(
     val exitCode: Int,
     val stdout: String,
     val stderr: String
@@ -20,7 +20,7 @@ internal data class ShizukuCommandResult(
         get() = exitCode == 0
 }
 
-internal class ShizukuCommandExecutor {
+class ShizukuCommandExecutor {
 
     private val remoteProcessMethod by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val stringArrayClass = arrayOf<String>().javaClass
