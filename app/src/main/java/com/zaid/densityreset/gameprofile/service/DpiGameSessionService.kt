@@ -24,8 +24,9 @@ import com.zaid.densityreset.gameprofile.domain.DensitySnapshot
 import com.zaid.densityreset.gameprofile.domain.GameSessionState
 import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
+import com.zaid.densityreset.gameprofile.shizuku.ShizukuCommandExecutor
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
-import com.zaid.densityreset.remoteconfig.RemoteConfigManager
+import com.zaid.densityreset.icons.DensityIconInvalidationCoordinator
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.startup.StartupActivity
 import kotlinx.coroutines.CancellationException
@@ -34,12 +35,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
+import kotlin.math.min
 
+/**
+ * Applies the selected game DPI, verifies the real WindowManager state and keeps
+ * that override for exactly [SESSION_DURATION_MILLIS]. At the deadline the
+ * service executes `/system/bin/wm density reset` through Shizuku and verifies
+ * that the override disappeared.
+ *
+ * The timer is absolute (restoreAt is persisted), so a service restart does not
+ * extend the 20-second window. Leaving the game never restores early; only the
+ * timer or an explicit manual/emergency restore can do that.
+ */
 class DpiGameSessionService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -53,40 +64,25 @@ class DpiGameSessionService : Service() {
     private val gameController by lazy {
         ShizukuGameController(applicationContext)
     }
+    private val commandExecutor by lazy {
+        ShizukuCommandExecutor()
+    }
     private val notificationManager by lazy {
         getSystemService(NotificationManager::class.java)
     }
 
     private var operationJob: Job? = null
-    private var countdownJob: Job? = null
+    private var timerJob: Job? = null
     private var foregroundStarted = false
-
-    private val shizukuStateListener: (ShizukuManager.State) -> Unit = { state ->
-        serviceScope.launch {
-            val session = repository.read()
-            if (!session.sessionActive) return@launch
-
-            if (!state.running || !state.permissionGranted) {
-                repository.updateStep(
-                    step = session.currentStep,
-                    errorMessage = "Shizuku se desconectó durante la sesión."
-                )
-                updateNotification(session, secondsRemaining(session))
-            } else if (session.currentStep == SessionStep.ERROR) {
-                requestRestore(RESTORE_SOURCE_RECOVERY)
-            }
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        ShizukuManager.addStateListener(shizukuStateListener)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForeground(
-            buildPreparingNotification(
+            buildNotification(
                 title = getString(R.string.game_session_preparing),
                 text = getString(R.string.game_session_checking_state)
             )
@@ -98,11 +94,10 @@ class DpiGameSessionService : Service() {
                     intent.getStringExtra(EXTRA_GAME_PACKAGE)
                 )
                 val preset = intent.getStringExtra(EXTRA_PRESET)
-                    ?.let { name ->
-                        runCatching { DensityPreset.valueOf(name) }.getOrNull()
-                    }
+                    ?.let { runCatching { DensityPreset.valueOf(it) }.getOrNull() }
+
                 if (game == null || preset == null) {
-                    operationJob = serviceScope.launch {
+                    launchOperation {
                         repository.failAndClear(
                             getString(R.string.game_session_invalid_configuration)
                         )
@@ -110,19 +105,29 @@ class DpiGameSessionService : Service() {
                         stopServiceCleanly()
                     }
                 } else {
-                    startExclusiveOperation {
-                        startSessionFlow(game, preset)
+                    launchOperation { startSessionFlow(game, preset) }
+                }
+            }
+
+            ACTION_RESTORE_NOW -> {
+                val source = intent.getStringExtra(EXTRA_RESTORE_SOURCE)
+                    ?: RESTORE_SOURCE_MANUAL
+
+                // Accessibility may report that the game left foreground. That
+                // must not shorten the requested fixed 20-second sensitivity.
+                if (source == RESTORE_SOURCE_GAME_EXIT) {
+                    if (operationJob?.isActive != true) {
+                        launchOperation(cancelTimer = false) { recoverPendingSession() }
+                    }
+                } else {
+                    launchOperation(cancelTimer = true) {
+                        restoreToPhysicalDensity(source)
                     }
                 }
             }
 
-            ACTION_RESTORE_NOW -> requestRestore(
-                intent.getStringExtra(EXTRA_RESTORE_SOURCE)
-                    ?: RESTORE_SOURCE_MANUAL
-            )
-
-            ACTION_RECOVER_SESSION, null -> startExclusiveOperation {
-                recoverPendingSession()
+            ACTION_RECOVER_SESSION, null -> {
+                launchOperation(cancelTimer = false) { recoverPendingSession() }
             }
         }
 
@@ -132,15 +137,18 @@ class DpiGameSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        ShizukuManager.removeStateListener(shizukuStateListener)
-        countdownJob?.cancel()
+        timerJob?.cancel()
         operationJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    private fun startExclusiveOperation(block: suspend () -> Unit) {
-        if (operationJob?.isActive == true) return
+    private fun launchOperation(
+        cancelTimer: Boolean = false,
+        block: suspend () -> Unit
+    ) {
+        operationJob?.cancel()
+        if (cancelTimer) timerJob?.cancel()
         operationJob = serviceScope.launch {
             try {
                 block()
@@ -149,16 +157,6 @@ class DpiGameSessionService : Service() {
             } catch (error: Throwable) {
                 handleUnexpectedFailure(error)
             }
-        }
-    }
-
-    private fun requestRestore(source: String) {
-        val previousJob = operationJob
-        previousJob?.cancel()
-        countdownJob?.cancel()
-        operationJob = serviceScope.launch {
-            previousJob?.cancelAndJoin()
-            restorePersistedSnapshot(source)
         }
     }
 
@@ -173,37 +171,19 @@ class DpiGameSessionService : Service() {
         }
 
         repository.updateStep(SessionStep.VALIDATING)
-        updateNotification(
-            game = game,
-            preset = preset,
-            step = SessionStep.VALIDATING,
-            seconds = null
-        )
+        updatePreparingNotification(game, preset, "Validando requisitos")
 
         val shizuku = ShizukuManager.currentState()
-        when {
-            !gameController.isInstalled(game) -> {
-                failWithoutRestoration("Este juego no está instalado.")
-                return
-            }
-            !shizuku.installed -> {
-                failWithoutRestoration("Shizuku no está instalado.")
-                return
-            }
-            !shizuku.running -> {
-                failWithoutRestoration("Shizuku no está ejecutándose.")
-                return
-            }
-            !shizuku.permissionGranted -> {
-                failWithoutRestoration("Permiso de Shizuku denegado.")
-                return
-            }
-            !DpiGameLockBridge.isConnected -> {
-                failWithoutRestoration(
-                    "Activa el servicio de Accesibilidad de Density Reset para bloquear el DPI en el juego."
-                )
-                return
-            }
+        val validationError = when {
+            !gameController.isInstalled(game) -> "Este juego no está instalado."
+            !shizuku.installed -> "Shizuku no está instalado."
+            !shizuku.running -> "Shizuku no está ejecutándose."
+            !shizuku.permissionGranted -> "Permiso de Shizuku denegado."
+            else -> null
+        }
+        if (validationError != null) {
+            failWithoutRestoration(validationError)
+            return
         }
 
         val originalState = densityController.getSystemState().getOrElse { error ->
@@ -212,6 +192,7 @@ class DpiGameSessionService : Service() {
             )
             return
         }
+
         val snapshot = DensitySnapshot(
             physicalDensity = originalState.initialDensity,
             effectiveDensity = originalState.currentDensity,
@@ -219,6 +200,7 @@ class DpiGameSessionService : Service() {
             previousOverrideDensity = originalState.currentDensity
                 .takeIf { originalState.hasOverride }
         )
+
         repository.beginSession(
             game = game,
             preset = preset,
@@ -227,46 +209,56 @@ class DpiGameSessionService : Service() {
         )
 
         repository.updateStep(SessionStep.CLOSING_GAME)
-        updateNotification(game, preset, SessionStep.CLOSING_GAME, null)
+        updatePreparingNotification(game, preset, "Cerrando el juego")
         gameController.forceStop(game).getOrElse {
             failWithoutRestoration("No se pudo reiniciar el juego.")
             return
         }
 
         repository.updateStep(SessionStep.APPLYING_DENSITY)
-        updateNotification(game, preset, SessionStep.APPLYING_DENSITY, null)
+        updatePreparingNotification(game, preset, "Aplicando ${preset.density} DPI")
+
         densityController.applyDensity(preset.density).getOrElse { error ->
-            abortAndRestore(
+            abortAndReset(
                 error.message ?: "El dispositivo no confirmó el DPI seleccionado."
             )
             return
         }
 
         repository.updateStep(SessionStep.VERIFYING_DENSITY)
-        updateNotification(game, preset, SessionStep.VERIFYING_DENSITY, null)
+        updatePreparingNotification(game, preset, "Verificando DPI real")
         delay(DENSITY_SETTLE_MILLIS)
-        val verified = densityController.getSystemState().getOrElse {
-            abortAndRestore("El dispositivo no confirmó el DPI seleccionado.")
-            return
-        }
-        if (verified.currentDensity != preset.density) {
-            abortAndRestore("El dispositivo no confirmó el DPI seleccionado.")
-            return
-        }
 
-        repository.updateStep(SessionStep.OPENING_GAME)
-        updateNotification(game, preset, SessionStep.OPENING_GAME, null)
-        gameController.launch(game).getOrElse {
-            abortAndRestore(
-                "No se pudo abrir el juego. El DPI anterior será restaurado."
+        val verified = densityController.getSystemState().getOrElse {
+            abortAndReset("El dispositivo no confirmó el DPI seleccionado.")
+            return
+        }
+        if (!verified.hasOverride || verified.currentDensity != preset.density) {
+            abortAndReset(
+                "El comando no quedó aplicado: se esperaba ${preset.density} DPI y WindowManager reportó ${verified.currentDensity} DPI."
             )
             return
         }
 
-        delay(GAME_LAUNCH_CONFIRMATION_MILLIS)
-        repository.markSessionActive(restoreAt = null)
+        // The 20-second deadline starts only after WindowManager has confirmed
+        // the requested density. It is persisted as an absolute timestamp.
+        val restoreAt = System.currentTimeMillis() + SESSION_DURATION_MILLIS
+        repository.markSessionActive(restoreAt = restoreAt)
         DpiGameLockBridge.notifySessionChanged()
-        stopServiceCleanly()
+        updateActiveNotification(game, preset, seconds = SESSION_DURATION_SECONDS)
+        scheduleResetAt(restoreAt)
+
+        repository.updateStep(SessionStep.OPENING_GAME)
+        gameController.launch(game).getOrElse {
+            abortAndReset("No se pudo abrir el juego. Se restaurará el DPI.")
+            return
+        }
+
+        // Return to SESSION_ACTIVE after launch so the UI can display the
+        // countdown. The absolute restoreAt is not changed.
+        repository.markSessionActive(restoreAt = restoreAt)
+        DpiGameLockBridge.notifySessionChanged()
+        updateActiveNotification(game, preset, secondsRemaining(repository.read()))
     }
 
     private suspend fun recoverPendingSession() {
@@ -277,71 +269,72 @@ class DpiGameSessionService : Service() {
         }
 
         val restoreAt = session.restoreAt
-        if (
-            session.currentStep == SessionStep.SESSION_ACTIVE &&
-            restoreAt == null
-        ) {
-            repeat(ACCESSIBILITY_RECONNECT_ATTEMPTS) {
-                if (DpiGameLockBridge.isConnected) {
-                    DpiGameLockBridge.notifySessionChanged()
-                    stopServiceCleanly()
+        if (restoreAt == null || restoreAt <= System.currentTimeMillis()) {
+            restoreToPhysicalDensity(RESTORE_SOURCE_RECOVERY)
+            return
+        }
+
+        val target = session.targetDensity
+        if (target != null) {
+            val state = densityController.getSystemState().getOrNull()
+            if (state == null || !state.hasOverride || state.currentDensity != target) {
+                // Do not silently extend the timer. Try to re-apply the selected
+                // density, but keep the original absolute deadline.
+                densityController.applyDensity(target).getOrElse {
+                    restoreToPhysicalDensity(RESTORE_SOURCE_RECOVERY)
                     return
                 }
-                delay(ACCESSIBILITY_RECONNECT_DELAY_MILLIS)
+                val reverified = densityController.getSystemState().getOrNull()
+                if (reverified == null || reverified.currentDensity != target) {
+                    restoreToPhysicalDensity(RESTORE_SOURCE_RECOVERY)
+                    return
+                }
             }
-
-            restorePersistedSnapshot(RESTORE_SOURCE_RECOVERY)
-            return
         }
 
-        if (
-            session.currentStep == SessionStep.SESSION_ACTIVE &&
-            restoreAt != null &&
-            restoreAt > System.currentTimeMillis()
-        ) {
-            startCountdown()
-            return
-        }
-
-        restorePersistedSnapshot(RESTORE_SOURCE_RECOVERY)
+        DpiGameLockBridge.notifySessionChanged()
+        updateSessionNotification(session, secondsRemaining(session))
+        scheduleResetAt(restoreAt)
     }
 
-    private fun startCountdown() {
-        countdownJob?.cancel()
-        countdownJob = serviceScope.launch {
+    private fun scheduleResetAt(restoreAt: Long) {
+        timerJob?.cancel()
+        timerJob = serviceScope.launch {
             while (isActive) {
+                val remainingMillis = restoreAt - System.currentTimeMillis()
+                if (remainingMillis <= 0L) break
+
                 val session = repository.read()
                 if (!session.sessionActive) return@launch
+                updateSessionNotification(session, secondsRemaining(session))
+                delay(min(COUNTDOWN_UPDATE_MILLIS, remainingMillis))
+            }
 
-                val seconds = secondsRemaining(session)
-                updateNotification(session, seconds)
-                if (seconds <= 0) {
-                    requestRestore(RESTORE_SOURCE_TIMER)
-                    return@launch
-                }
-
-                delay(COUNTDOWN_UPDATE_MILLIS)
+            if (repository.read().sessionActive) {
+                restoreToPhysicalDensity(RESTORE_SOURCE_TIMER)
             }
         }
     }
 
-    private suspend fun abortAndRestore(errorMessage: String) {
-        val restored = restoreSnapshotInternal()
-        if (restored.isSuccess) {
-            repository.failAndClear(errorMessage)
+    private suspend fun abortAndReset(message: String) {
+        timerJob?.cancel()
+        val result = executeWmDensityReset()
+        if (result.isSuccess) {
+            repository.failAndClear(message)
             DpiGameLockBridge.notifySessionChanged()
-            showToast(errorMessage)
+            showToast(message)
             stopServiceCleanly()
         } else {
-            val message = getString(R.string.game_session_restore_failed)
-            repository.markRestorationFailure(message)
+            val failure = result.exceptionOrNull()?.message
+                ?: getString(R.string.game_session_restore_failed)
+            repository.markRestorationFailure(failure)
             DpiGameLockBridge.notifySessionChanged()
-            updateNotification(repository.read(), null)
-            showToast(message)
+            updateSessionNotification(repository.read(), null)
+            showToast(failure)
         }
     }
 
-    private suspend fun restorePersistedSnapshot(source: String) {
+    private suspend fun restoreToPhysicalDensity(source: String) {
         val session = repository.read()
         if (!session.sessionActive) {
             DpiGameLockBridge.notifySessionChanged()
@@ -351,67 +344,71 @@ class DpiGameSessionService : Service() {
 
         repository.updateStep(SessionStep.RESTORING_DENSITY)
         DpiGameLockBridge.notifySessionChanged()
-        updateNotification(
+        updateSessionNotification(
             session.copy(currentStep = SessionStep.RESTORING_DENSITY),
             null
         )
 
-        val result = restoreSnapshotInternal()
+        val result = executeWmDensityReset()
         result.onSuccess {
-            repository.finishSession(
-                getString(R.string.dpi_restored_successfully)
-            )
+            repository.finishSession(getString(R.string.dpi_restored_successfully))
             DpiGameLockBridge.notifySessionChanged()
-            if (source == RESTORE_SOURCE_VOLUME) {
+            if (source != RESTORE_SOURCE_TIMER && source != RESTORE_SOURCE_RECOVERY) {
                 showToast(getString(R.string.dpi_restored_successfully))
             }
             stopServiceCleanly()
-        }.onFailure {
-            val message = getString(R.string.game_session_restore_failed)
+        }.onFailure { error ->
+            val message = error.message ?: getString(R.string.game_session_restore_failed)
             repository.markRestorationFailure(message)
             DpiGameLockBridge.notifySessionChanged()
-            updateNotification(repository.read(), null)
+            updateSessionNotification(repository.read(), null)
             showToast(message)
         }
     }
 
-    private suspend fun restoreSnapshotInternal(): Result<Unit> {
-        val session = repository.read()
-        val snapshot = session.snapshot
-            ?: return Result.failure(
-                IllegalStateException("No se encontró el snapshot de densidad.")
-            )
+    /**
+     * The primary reset is deliberately the exact shell command requested by
+     * the product flow. Binder is not used as the normal reset path here.
+     */
+    private suspend fun executeWmDensityReset(): Result<Unit> {
+        val before = densityController.getSystemState().getOrNull()
 
-        val restoreResult = if (
-            snapshot.hadOverride &&
-            snapshot.previousOverrideDensity != null
-        ) {
-            densityController.applyDensity(snapshot.previousOverrideDensity)
-        } else {
-            densityController.resetDensity()
+        val commandResult = commandExecutor.execute(
+            arrayOf("/system/bin/wm", "density", "reset")
+        ).getOrElse { return Result.failure(it) }
+
+        if (!commandResult.isSuccess) {
+            val detail = commandResult.stderr.ifBlank { commandResult.stdout }
+            return Result.failure(
+                IllegalStateException(
+                    detail.ifBlank { "wm density reset devolvió código ${commandResult.exitCode}." }
+                )
+            )
         }
-        restoreResult.getOrElse { return Result.failure(it) }
 
         delay(DENSITY_SETTLE_MILLIS)
         val verified = densityController.getSystemState().getOrElse {
             return Result.failure(it)
         }
 
-        val restored = if (snapshot.hadOverride) {
-            verified.hasOverride &&
-                verified.currentDensity == snapshot.previousOverrideDensity
-        } else {
-            !verified.hasOverride &&
-                verified.currentDensity == snapshot.physicalDensity
-        }
-
-        return if (restored) {
-            Result.success(Unit)
-        } else {
-            Result.failure(
-                IllegalStateException("No fue posible verificar la restauración del DPI.")
+        if (verified.hasOverride || verified.currentDensity != verified.initialDensity) {
+            return Result.failure(
+                IllegalStateException(
+                    "wm density reset se ejecutó, pero WindowManager aún reporta ${verified.currentDensity} DPI."
+                )
             )
         }
+
+        if (before != null && before.currentDensity != verified.currentDensity) {
+            DensityIconInvalidationCoordinator.onDensityChanged(
+                context = applicationContext,
+                previousDensity = before.currentDensity,
+                expectedDensity = verified.currentDensity,
+                hasOverride = false
+            )
+        }
+
+        return Result.success(Unit)
     }
 
     private suspend fun failWithoutRestoration(message: String) {
@@ -424,8 +421,8 @@ class DpiGameSessionService : Service() {
     private suspend fun handleUnexpectedFailure(error: Throwable) {
         val session = repository.read()
         val message = error.message ?: getString(R.string.game_session_unexpected_error)
-        if (session.sessionActive && session.snapshot != null) {
-            abortAndRestore(message)
+        if (session.sessionActive) {
+            abortAndReset(message)
         } else {
             repository.failAndClear(message)
             DpiGameLockBridge.notifySessionChanged()
@@ -440,19 +437,53 @@ class DpiGameSessionService : Service() {
         ).toInt()
     }
 
-    private fun sessionDurationSeconds(session: GameSessionState): Int {
-        val startedAt = session.sessionStartedAt ?: return RemoteConfigManager.currentConfig()
-            .gameSessionDurationSeconds
-            .coerceIn(5, 150)
-        val restoreAt = session.restoreAt ?: return RemoteConfigManager.currentConfig()
-            .gameSessionDurationSeconds
-            .coerceIn(5, 150)
-        return ceil((restoreAt - startedAt).coerceAtLeast(1L) / 1_000.0)
-            .toInt()
-            .coerceIn(1, 150)
+    private fun updatePreparingNotification(
+        game: SupportedGame,
+        preset: DensityPreset,
+        detail: String
+    ) {
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            buildNotification(
+                getString(R.string.game_session_preparing),
+                "${game.displayName} · ${preset.displayName} · $detail"
+            )
+        )
     }
 
-    private fun updateNotification(
+    private fun updateActiveNotification(
+        game: SupportedGame,
+        preset: DensityPreset,
+        seconds: Int
+    ) {
+        val text = "${game.displayName} · ${preset.displayName} · ${preset.density} DPI · wm density reset en $seconds s"
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification_density)
+                .setContentTitle(getString(R.string.game_session_active))
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(openAppPendingIntent())
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setProgress(
+                    SESSION_DURATION_SECONDS,
+                    seconds.coerceIn(0, SESSION_DURATION_SECONDS),
+                    false
+                )
+                .addAction(
+                    0,
+                    getString(R.string.restore_now),
+                    restorePendingIntent(RESTORE_SOURCE_NOTIFICATION)
+                )
+                .build()
+        )
+    }
+
+    private fun updateSessionNotification(
         session: GameSessionState,
         seconds: Int?
     ) {
@@ -461,88 +492,39 @@ class DpiGameSessionService : Service() {
         if (game == null || preset == null) {
             notificationManager.notify(
                 NOTIFICATION_ID,
-                buildPreparingNotification(
+                buildNotification(
                     getString(R.string.game_session_preparing),
                     session.errorMessage ?: getString(R.string.game_session_checking_state)
                 )
             )
             return
         }
-        updateNotification(
-            game,
-            preset,
-            session.currentStep,
-            seconds,
-            session.errorMessage,
-            sessionDurationSeconds(session)
-        )
-    }
 
-    private fun updateNotification(
-        game: SupportedGame,
-        preset: DensityPreset,
-        step: SessionStep,
-        seconds: Int?,
-        errorMessage: String? = null,
-        durationSeconds: Int = RemoteConfigManager.currentConfig()
-            .gameSessionDurationSeconds
-            .coerceIn(5, 150)
-    ) {
-        val title = when (step) {
-            SessionStep.SESSION_ACTIVE -> getString(R.string.game_session_active)
-            SessionStep.RESTORING_DENSITY -> getString(R.string.game_session_restoring)
-            SessionStep.ERROR -> getString(R.string.game_session_attention)
-            else -> getString(R.string.game_session_preparing)
-        }
-        val base = "${game.displayName} · ${preset.displayName} · ${preset.density} DPI"
-        val text = when {
-            !errorMessage.isNullOrBlank() -> errorMessage
-            step == SessionStep.SESSION_ACTIVE && seconds != null ->
-                "$base · Restauración automática en $seconds s"
-            step == SessionStep.SESSION_ACTIVE ->
-                "$base · DPI bloqueado mientras juegas"
-            else -> "$base · ${stepLabel(step)}"
-        }
-
-        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_density)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openAppPendingIntent())
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(
-                0,
-                getString(R.string.restore_now),
-                restorePendingIntent(RESTORE_SOURCE_NOTIFICATION)
+        when (session.currentStep) {
+            SessionStep.RESTORING_DENSITY -> notificationManager.notify(
+                NOTIFICATION_ID,
+                buildNotification(
+                    getString(R.string.game_session_restoring),
+                    "${game.displayName} · Ejecutando wm density reset"
+                )
             )
-
-        if (step == SessionStep.SESSION_ACTIVE && seconds != null) {
-            builder.setProgress(durationSeconds, seconds.coerceIn(0, durationSeconds), false)
+            SessionStep.ERROR -> notificationManager.notify(
+                NOTIFICATION_ID,
+                buildNotification(
+                    getString(R.string.game_session_attention),
+                    session.errorMessage ?: getString(R.string.game_session_restore_failed)
+                )
+            )
+            else -> updateActiveNotification(game, preset, seconds ?: secondsRemaining(session))
         }
-        notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
 
-    private fun stepLabel(step: SessionStep): String = when (step) {
-        SessionStep.VALIDATING -> "Validando requisitos"
-        SessionStep.SAVING_DENSITY -> "Guardando DPI actual"
-        SessionStep.CLOSING_GAME -> "Cerrando el juego"
-        SessionStep.APPLYING_DENSITY -> "Aplicando DPI"
-        SessionStep.VERIFYING_DENSITY -> "Verificando DPI"
-        SessionStep.OPENING_GAME -> "Abriendo el juego"
-        SessionStep.RESTORING_DENSITY -> "Restaurando DPI"
-        SessionStep.ERROR -> "Requiere atención"
-        else -> "Preparando sesión"
-    }
-
-    private fun buildPreparingNotification(title: String, text: String): Notification =
+    private fun buildNotification(title: String, text: String): Notification =
         NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_density)
             .setContentTitle(title)
             .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(openAppPendingIntent())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -576,16 +558,15 @@ class DpiGameSessionService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    private fun restorePendingIntent(source: String): PendingIntent =
-        PendingIntent.getService(
-            this,
-            REQUEST_RESTORE,
-            Intent(this, DpiGameSessionService::class.java).apply {
-                action = ACTION_RESTORE_NOW
-                putExtra(EXTRA_RESTORE_SOURCE, source)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    private fun restorePendingIntent(source: String): PendingIntent = PendingIntent.getService(
+        this,
+        REQUEST_RESTORE,
+        Intent(this, DpiGameSessionService::class.java).apply {
+            action = ACTION_RESTORE_NOW
+            putExtra(EXTRA_RESTORE_SOURCE, source)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -606,7 +587,7 @@ class DpiGameSessionService : Service() {
     }
 
     private fun stopServiceCleanly() {
-        countdownJob?.cancel()
+        timerJob?.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         foregroundStarted = false
         stopSelf()
@@ -635,11 +616,10 @@ class DpiGameSessionService : Service() {
         private const val REQUEST_OPEN_APP = 4103
         private const val REQUEST_RESTORE = 4104
 
+        const val SESSION_DURATION_SECONDS = 20
+        private const val SESSION_DURATION_MILLIS = 20_000L
         private const val COUNTDOWN_UPDATE_MILLIS = 1_000L
-        private const val DENSITY_SETTLE_MILLIS = 500L
-        private const val GAME_LAUNCH_CONFIRMATION_MILLIS = 1_500L
-        private const val ACCESSIBILITY_RECONNECT_ATTEMPTS = 5
-        private const val ACCESSIBILITY_RECONNECT_DELAY_MILLIS = 300L
+        private const val DENSITY_SETTLE_MILLIS = 350L
 
         fun startSession(
             context: Context,

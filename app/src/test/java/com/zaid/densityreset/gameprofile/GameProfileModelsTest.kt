@@ -3,6 +3,7 @@ package com.zaid.densityreset.gameprofile
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.DensitySnapshot
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
+import com.zaid.densityreset.gameprofile.service.DpiGameSessionService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -37,6 +38,11 @@ class GameProfileModelsTest {
 
         assertEquals(20, DensityPreset.ULTRA.density)
         assertEquals("Sensibilidad extrema", DensityPreset.ULTRA.description)
+    }
+
+    @Test
+    fun gameSensitivityUsesExactTwentySecondWindow() {
+        assertEquals(20, DpiGameSessionService.SESSION_DURATION_SECONDS)
     }
 
     @Test
