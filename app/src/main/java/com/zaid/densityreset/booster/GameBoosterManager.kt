@@ -2,6 +2,7 @@ package com.zaid.densityreset.booster
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -37,7 +38,6 @@ class GameBoosterManager(
 
     private var activeAdapter: RomGameAdapter? = null
     private var activeProfile: DeviceProfile? = null
-    private var activeCapabilities = BoosterCapabilities()
 
     init {
         scope.launch {
@@ -58,7 +58,7 @@ class GameBoosterManager(
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(packageName)
         val adapter = createAdapter(profile, packageName, diagnostic, config)
         val capabilities = adapter.detectCapabilities()
-        val snapshot = BoosterSnapshot(
+        var snapshot = BoosterSnapshot(
             packageName = packageName,
             romFamily = profile.romFamily,
             previousGameMode = diagnostic.currentMode,
@@ -67,12 +67,12 @@ class GameBoosterManager(
                 .orEmpty(),
             startedAt = System.currentTimeMillis(),
             selectedMode = mode,
-            vendor = profile.vendor
+            vendor = profile.vendor,
+            gameModeChanged = false
         )
 
         activeAdapter = adapter
         activeProfile = profile
-        activeCapabilities = capabilities
         snapshotStore.save(snapshot)
 
         val actions = mutableListOf(
@@ -100,6 +100,8 @@ class GameBoosterManager(
             result.fold(
                 onSuccess = {
                     modeApplied = true
+                    snapshot = snapshot.copy(gameModeChanged = true)
+                    snapshotStore.save(snapshot)
                     actions += BoosterAction(
                         name = "Game Mode",
                         detail = mode.commandModeLabel(),
@@ -122,9 +124,10 @@ class GameBoosterManager(
 
         val flags = monitorFlags(config)
         performanceMonitor.start(packageName, flags, capabilities)
-        actions += monitorActions(flags, capabilities)
+        val monitorActions = monitorActions(flags, capabilities)
+        actions += monitorActions
 
-        val hasMonitorWork = flags.ram || flags.battery || flags.thermal || flags.fps
+        val hasMonitorWork = monitorActions.any { it.applied }
         val active = modeApplied || hasMonitorWork
         GameBoosterRuntime.mutableState.value = GameBoosterState(
             active = active,
@@ -138,8 +141,11 @@ class GameBoosterManager(
             message = modeFailure
         )
 
-        return if (modeApplied) {
-            BoosterResult.Success("${mode.displayName} activado.", actions)
+        return if (modeApplied || hasMonitorWork) {
+            BoosterResult.Success(
+                if (modeApplied) "${mode.displayName} activado." else "Monitores del juego activos.",
+                actions
+            )
         } else {
             BoosterResult.Failure(
                 modeFailure ?: "Game Booster no disponible en este dispositivo."
@@ -157,7 +163,6 @@ class GameBoosterManager(
 
         activeAdapter = adapter
         activeProfile = profile
-        activeCapabilities = capabilities
         performanceMonitor.start(snapshot.packageName, monitorFlags(config), capabilities)
         GameBoosterRuntime.mutableState.value = GameBoosterState(
             active = true,
@@ -166,10 +171,13 @@ class GameBoosterManager(
             rom = profile.romFamily,
             deviceProfile = profile,
             capabilities = capabilities,
-            actionsApplied = listOf(
-                BoosterAction("Perfil ROM", profile.adapterDisplayName, true),
-                BoosterAction("Sesión", "Recuperada sin prolongar cambios temporales", true)
-            ),
+            actionsApplied = buildList {
+                add(BoosterAction("Perfil ROM", profile.adapterDisplayName, true))
+                if (snapshot.gameModeChanged && snapshot.previousGameMode != null) {
+                    add(BoosterAction("Game Mode", "Cambio temporal recuperado", true))
+                }
+                add(BoosterAction("Sesión", "Recuperada sin prolongar cambios temporales", true))
+            },
             monitor = performanceMonitor.state.value
         )
         return true
@@ -210,12 +218,7 @@ class GameBoosterManager(
             config
         )
 
-        val hadGameModeChange = snapshot.previousGameMode != null &&
-            GameBoosterRuntime.mutableState.value.actionsApplied.any {
-                it.name == "Game Mode" && it.applied
-            }
-
-        if (hadGameModeChange) {
+        if (snapshot.gameModeChanged) {
             val restored = adapter.restore(snapshot)
             if (restored.isFailure) {
                 val message = restored.exceptionOrNull()?.message
@@ -242,7 +245,6 @@ class GameBoosterManager(
     private fun clearRuntime() {
         activeAdapter = null
         activeProfile = null
-        activeCapabilities = BoosterCapabilities()
         GameBoosterRuntime.mutableState.value = GameBoosterState()
     }
 
@@ -295,6 +297,7 @@ private class BoosterSnapshotStore(private val context: Context) {
             prefs[Keys.romFamily] = snapshot.romFamily.name
             prefs[Keys.vendor] = snapshot.vendor.name
             prefs[Keys.startedAt] = snapshot.startedAt
+            prefs[Keys.gameModeChanged] = snapshot.gameModeChanged
             snapshot.previousGameMode?.let { prefs[Keys.previousGameMode] = it }
                 ?: prefs.remove(Keys.previousGameMode)
             snapshot.selectedMode?.let { prefs[Keys.selectedMode] = it.name }
@@ -324,7 +327,8 @@ private class BoosterSnapshotStore(private val context: Context) {
                 ?.let { runCatching { BoosterMode.valueOf(it) }.getOrNull() },
             vendor = prefs[Keys.vendor]
                 ?.let { runCatching { DeviceVendor.valueOf(it) }.getOrNull() }
-                ?: DeviceVendor.GENERIC
+                ?: DeviceVendor.GENERIC,
+            gameModeChanged = prefs[Keys.gameModeChanged] ?: false
         )
     }
 
@@ -340,6 +344,7 @@ private class BoosterSnapshotStore(private val context: Context) {
         val previousValues = stringPreferencesKey("previous_values")
         val selectedMode = stringPreferencesKey("selected_mode")
         val startedAt = longPreferencesKey("started_at")
+        val gameModeChanged = booleanPreferencesKey("game_mode_changed")
     }
 }
 
