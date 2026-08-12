@@ -1,0 +1,32 @@
+name: Detener publicación automática 1.6.1
+
+on:
+  push:
+    branches:
+      - ops/remove-v160-release
+    paths:
+      - .github/workflows/cancel-v161-auto-release.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-release:
+    name: Cancelar workflow de publicación 1.6.1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancelar publicación en curso
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN_ID: "31568784387"
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET_RUN_ID" --jq '.status')"
+          if [ "$status" = "queued" ] || [ "$status" = "in_progress" ] || [ "$status" = "waiting" ] || [ "$status" = "requested" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET_RUN_ID/cancel"
+            echo "Cancelación solicitada para el workflow $TARGET_RUN_ID."
+          else
+            echo "El workflow ya no está activo; estado: $status"
+          fi
