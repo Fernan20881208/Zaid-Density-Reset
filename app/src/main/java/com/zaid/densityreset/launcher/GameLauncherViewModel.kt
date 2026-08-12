@@ -228,6 +228,14 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         diagnoseDeviceIfPossible(force = true)
     }
 
+    fun requiresPerformanceOverlay(): Boolean =
+        config.gameBoosterEnabled && (
+            config.ramMonitorEnabled ||
+                config.batteryMonitorEnabled ||
+                config.thermalMonitorEnabled ||
+                config.fpsMonitorEnabled
+            )
+
     private fun diagnoseDeviceIfPossible(force: Boolean) {
         val shizuku = ShizukuManager.currentState()
         if (!shizuku.running || !shizuku.permissionGranted || diagnosing) return
@@ -338,7 +346,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         config.gameBoosterEnabled && when (mode) {
             BoosterMode.GAME -> config.gameModeEnabled
             BoosterMode.BATTERY -> config.batteryModeEnabled
-            BoosterMode.MAX_PERFORMANCE -> config.maxPerformanceEnabled
+            BoosterMode.MAX_PERFORMANCE,
+            BoosterMode.ULTRA_MAX_PERFORMANCE -> config.maxPerformanceEnabled
         }
 
     override fun onCleared() {
