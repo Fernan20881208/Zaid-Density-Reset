@@ -93,7 +93,8 @@ data class BoosterSnapshot(
     val previousValues: Map<String, String>,
     val startedAt: Long,
     val selectedMode: BoosterMode? = null,
-    val vendor: DeviceVendor = DeviceVendor.GENERIC
+    val vendor: DeviceVendor = DeviceVendor.GENERIC,
+    val gameModeChanged: Boolean = false
 )
 
 data class BoosterAction(
