@@ -3,8 +3,10 @@ package com.zaid.densityreset.launcher
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,6 +27,22 @@ class GameLauncherActivity : ComponentActivity() {
 
     private val viewModel: GameLauncherViewModel by viewModels()
     private var pendingGame: SupportedGame? = null
+
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val game = pendingGame
+        pendingGame = null
+        if (game != null && Settings.canDrawOverlays(this)) {
+            requestNotificationThenPlay(game)
+        } else if (game != null) {
+            Toast.makeText(
+                this,
+                "Activa ‘Mostrar sobre otras apps’ para ver FPS, RAM, batería y temperatura dentro del juego.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -86,6 +104,20 @@ class GameLauncherActivity : ComponentActivity() {
     }
 
     private fun requestPlay(game: SupportedGame) {
+        if (viewModel.requiresPerformanceOverlay() && !Settings.canDrawOverlays(this)) {
+            pendingGame = game
+            overlayPermissionLauncher.launch(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+            )
+            return
+        }
+        requestNotificationThenPlay(game)
+    }
+
+    private fun requestNotificationThenPlay(game: SupportedGame) {
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
