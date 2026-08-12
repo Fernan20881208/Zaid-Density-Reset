@@ -36,7 +36,7 @@ class GameLauncherActivity : ComponentActivity() {
         } else if (!granted) {
             Toast.makeText(
                 this,
-                "El permiso de notificaciones es necesario durante la sesión de DPI.",
+                "El permiso de notificaciones es necesario durante la sesión de juego.",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -54,10 +54,13 @@ class GameLauncherActivity : ComponentActivity() {
             GameLauncherScreen(
                 state = state,
                 isPresetEnabled = viewModel::isPresetEnabled,
+                isBoosterModeEnabled = viewModel::isBoosterModeEnabled,
                 onSelectProfile = viewModel::selectProfile,
+                onSelectBoosterMode = viewModel::selectBoosterMode,
                 onToggleDefault = viewModel::toggleDefaultProfile,
                 onPlay = ::requestPlay,
                 onRestore = viewModel::restoreNow,
+                onRedetectDevice = viewModel::redetectDevice,
                 onOpenLegacyControls = {
                     startActivity(Intent(this, MainActivity::class.java))
                 }
