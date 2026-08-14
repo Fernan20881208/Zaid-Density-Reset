@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.zaid.densityreset.booster.BoosterMode
 import com.zaid.densityreset.booster.GameBoosterManager
 import com.zaid.densityreset.booster.GameBoosterState
+import com.zaid.densityreset.booster.GameOverlayPreference
+import com.zaid.densityreset.booster.GameOverlayPreferencesStore
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
 import com.zaid.densityreset.gameprofile.domain.GameSessionControllerImpl
@@ -37,6 +39,8 @@ data class GameLauncherGameUiState(
     val lastProfile: DensityPreset?,
     val defaultProfile: DensityPreset?,
     val boosterMode: BoosterMode,
+    val overlayEnabled: Boolean,
+    val overlayOpacityPercent: Int,
     val canPlay: Boolean
 )
 
@@ -62,9 +66,11 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         gameController = gameController
     )
     private val diagnosticBoosterManager = GameBoosterManager(application)
+    private val overlayPreferencesStore = GameOverlayPreferencesStore(application)
 
     private val installed = mutableMapOf<SupportedGame, InstalledGameInfo>()
     private var preferences: Map<SupportedGame, GameLauncherPreference> = emptyMap()
+    private val overlayPreferences = mutableMapOf<SupportedGame, GameOverlayPreference>()
     private var config: RemoteAppConfig = RemoteConfigManager.currentConfig()
     private var session = GameSessionState()
     private var booster = GameBoosterState()
@@ -90,6 +96,15 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
     init {
         ShizukuManager.addStateListener(shizukuListener)
         refreshGames()
+
+        SupportedGame.entries.forEach { game ->
+            viewModelScope.launch {
+                overlayPreferencesStore.observe(game.packageName).collect { preference ->
+                    overlayPreferences[game] = preference
+                    rebuild()
+                }
+            }
+        }
 
         viewModelScope.launch {
             repository.observePreferences().collect { value ->
@@ -154,6 +169,20 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         }
         viewModelScope.launch {
             repository.setBoosterMode(game, mode)
+        }
+    }
+
+    fun setOverlayEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch {
+            overlayPreferencesStore.setEnabled(game.packageName, enabled)
+        }
+    }
+
+    fun setOverlayOpacity(game: SupportedGame, opacityPercent: Int) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch {
+            overlayPreferencesStore.setOpacity(game.packageName, opacityPercent)
         }
     }
 
@@ -228,13 +257,16 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         diagnoseDeviceIfPossible(force = true)
     }
 
-    fun requiresPerformanceOverlay(): Boolean =
-        config.gameBoosterEnabled && (
-            config.ramMonitorEnabled ||
-                config.batteryMonitorEnabled ||
-                config.thermalMonitorEnabled ||
-                config.fpsMonitorEnabled
-            )
+    fun requiresPerformanceOverlay(game: SupportedGame): Boolean {
+        val preference = overlayPreferences[game] ?: GameOverlayPreference()
+        return preference.enabled &&
+            config.gameBoosterEnabled && (
+                config.ramMonitorEnabled ||
+                    config.batteryMonitorEnabled ||
+                    config.thermalMonitorEnabled ||
+                    config.fpsMonitorEnabled
+                )
+    }
 
     private fun diagnoseDeviceIfPossible(force: Boolean) {
         val shizuku = ShizukuManager.currentState()
@@ -295,6 +327,7 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
                 installed[game] = it
             }
             val preference = preferences[game] ?: GameLauncherPreference()
+            val overlayPreference = overlayPreferences[game] ?: GameOverlayPreference()
             val profile = selectedProfile(game)
             GameLauncherGameUiState(
                 game = game,
@@ -308,6 +341,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
                 lastProfile = preference.lastProfile,
                 defaultProfile = preference.defaultProfile,
                 boosterMode = preference.boosterMode,
+                overlayEnabled = overlayPreference.enabled,
+                overlayOpacityPercent = overlayPreference.normalizedOpacityPercent,
                 canPlay = info.installed &&
                     isGameEnabled(game) &&
                     isPresetEnabled(profile) &&

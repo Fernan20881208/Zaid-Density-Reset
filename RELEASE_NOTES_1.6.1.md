@@ -2,11 +2,14 @@
 
 ## Monitor flotante dentro del juego
 
-- FPS, RAM, batería y temperatura ahora se muestran en un HUD flotante sobre Free Fire o Free Fire MAX durante la sesión.
-- El HUD usa el permiso oficial de Android `Mostrar sobre otras apps` (`SYSTEM_ALERT_WINDOW` + `TYPE_APPLICATION_OVERLAY`).
-- La aplicación solicita al usuario habilitar ese permiso antes de iniciar una sesión cuando los monitores están activos.
+- FPS, RAM, batería y temperatura se pueden mostrar en un HUD flotante sobre Free Fire o Free Fire MAX durante la sesión.
+- El HUD ahora es opcional por juego: Free Fire y Free Fire MAX guardan su propia preferencia.
+- La opacidad del overlay se puede ajustar entre 20% y 100%; la interfaz muestra también la transparencia equivalente.
+- El valor predeterminado es 85% de opacidad para conservar el aspecto previsto del HUD.
+- Desactivar el overlay no desactiva los monitores: continúan funcionando para el estado interno y la notificación.
+- El HUD usa el permiso oficial de Android `Mostrar sobre otras apps` (`SYSTEM_ALERT_WINDOW` + `TYPE_APPLICATION_OVERLAY`) únicamente cuando el usuario decide mostrarlo.
+- Si el permiso no se concede o Android rechaza la ventana, el juego y el Game Booster continúan normalmente; simplemente no se dibuja el HUD.
 - El overlay solo presenta datos reales producidos por los monitores existentes; no sustituye FPS por Hz ni inventa temperaturas.
-- Si el permiso no está concedido o Android rechaza la ventana, los monitores flotantes no se consideran activos.
 - El overlay desaparece al restaurar o finalizar la sesión.
 
 ## Ultra máximo rendimiento · Modo benchmark

@@ -36,6 +36,7 @@ class GameBoosterManager(
     private val snapshotStore = BoosterSnapshotStore(appContext)
     private val performanceMonitor = GamePerformanceMonitor(appContext, commandExecutor)
     private val overlayController = GameStatsOverlayController(appContext)
+    private val overlayPreferencesStore = GameOverlayPreferencesStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var activeAdapter: RomGameAdapter? = null
@@ -210,35 +211,39 @@ class GameBoosterManager(
         }
 
         val requestedFlags = monitorFlags(config)
+        val overlayPreference = overlayPreferencesStore.read(packageName)
         var hasMonitorWork = false
         if (requestedFlags.anyEnabled()) {
-            if (overlayController.canDraw()) {
-                performanceMonitor.start(packageName, requestedFlags, capabilities)
-                val monitorActions = monitorActions(requestedFlags, capabilities)
-                actions += monitorActions
-                hasMonitorWork = monitorActions.any { it.applied }
-                if (hasMonitorWork) {
-                    val overlayStarted = overlayController.start()
-                    actions += BoosterAction(
+            performanceMonitor.start(packageName, requestedFlags, capabilities)
+            val monitorActions = monitorActions(requestedFlags, capabilities)
+            actions += monitorActions
+            hasMonitorWork = monitorActions.any { it.applied }
+
+            if (hasMonitorWork) {
+                when {
+                    !overlayPreference.enabled -> actions += BoosterAction(
                         name = "Overlay HUD",
-                        detail = if (overlayStarted) {
-                            "FPS, RAM, batería y temperatura sobre el juego"
-                        } else {
-                            "Android rechazó la ventana flotante."
-                        },
-                        applied = overlayStarted
+                        detail = "Desactivado por el usuario. Los monitores siguen activos.",
+                        applied = false
                     )
-                    if (!overlayStarted) {
-                        performanceMonitor.stop()
-                        hasMonitorWork = false
+                    !overlayController.canDraw() -> actions += BoosterAction(
+                        name = "Overlay HUD",
+                        detail = "Sin permiso para mostrarse sobre otras apps. Los monitores siguen activos.",
+                        applied = false
+                    )
+                    else -> {
+                        val overlayStarted = overlayController.start(overlayPreference.normalizedOpacityPercent)
+                        actions += BoosterAction(
+                            name = "Overlay HUD",
+                            detail = if (overlayStarted) {
+                                "Activo · opacidad ${overlayPreference.normalizedOpacityPercent}%"
+                            } else {
+                                "Android rechazó la ventana flotante. Los monitores siguen activos."
+                            },
+                            applied = overlayStarted
+                        )
                     }
                 }
-            } else {
-                actions += BoosterAction(
-                    name = "Overlay HUD",
-                    detail = "Falta el permiso Mostrar sobre otras apps.",
-                    applied = false
-                )
             }
         }
 
@@ -294,13 +299,13 @@ class GameBoosterManager(
         activeProfile = profile
 
         val requestedFlags = monitorFlags(config)
+        val overlayPreference = overlayPreferencesStore.read(snapshot.packageName)
         var hasMonitorWork = false
-        if (requestedFlags.anyEnabled() && overlayController.canDraw()) {
+        if (requestedFlags.anyEnabled()) {
             performanceMonitor.start(snapshot.packageName, requestedFlags, capabilities)
             hasMonitorWork = monitorActions(requestedFlags, capabilities).any { it.applied }
-            if (hasMonitorWork && !overlayController.start()) {
-                performanceMonitor.stop()
-                hasMonitorWork = false
+            if (hasMonitorWork && overlayPreference.enabled && overlayController.canDraw()) {
+                overlayController.start(overlayPreference.normalizedOpacityPercent)
             }
         }
 
@@ -327,7 +332,15 @@ class GameBoosterManager(
                     add(BoosterAction("Modo benchmark", "Fixed Performance pendiente de restauración", true))
                 }
                 if (hasMonitorWork) {
-                    add(BoosterAction("Overlay HUD", "Monitor flotante recuperado", true))
+                    add(BoosterAction(
+                        "Overlay HUD",
+                        when {
+                            !overlayPreference.enabled -> "Desactivado por el usuario; monitores recuperados"
+                            !overlayController.canDraw() -> "Sin permiso de overlay; monitores recuperados"
+                            else -> "Monitor flotante recuperado · opacidad ${overlayPreference.normalizedOpacityPercent}%"
+                        },
+                        overlayPreference.enabled && overlayController.canDraw()
+                    ))
                 }
                 add(BoosterAction("Sesión", "Recuperada sin prolongar cambios temporales", true))
             },
