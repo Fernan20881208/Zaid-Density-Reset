@@ -19,7 +19,7 @@ jobs:
       - name: Cancelar publicación en curso
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_RUN_ID: "31568784387"
+          TARGET_RUN_ID: "31841205464"
         shell: bash
         run: |
           set -euo pipefail
