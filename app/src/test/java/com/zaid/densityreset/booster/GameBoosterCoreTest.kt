@@ -231,6 +231,17 @@ class GameBoosterCoreTest {
     }
 
     @Test
+    fun overlayOpacityIsClampedToUsefulRange() {
+        assertEquals(20, normalizeOverlayOpacity(0))
+        assertEquals(20, normalizeOverlayOpacity(20))
+        assertEquals(85, normalizeOverlayOpacity(85))
+        assertEquals(100, normalizeOverlayOpacity(100))
+        assertEquals(100, normalizeOverlayOpacity(140))
+        assertEquals(85, GameOverlayPreference().normalizedOpacityPercent)
+        assertTrue(GameOverlayPreference().enabled)
+    }
+
+    @Test
     fun remoteConfigOnlyEnablesCompiledBoosterBehaviors() {
         val config = RemoteAppConfig.DEFAULT
 

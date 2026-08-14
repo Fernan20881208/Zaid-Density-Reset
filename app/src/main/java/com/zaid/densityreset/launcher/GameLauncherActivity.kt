@@ -33,14 +33,15 @@ class GameLauncherActivity : ComponentActivity() {
     ) {
         val game = pendingGame
         pendingGame = null
-        if (game != null && Settings.canDrawOverlays(this)) {
+        if (game != null) {
+            if (!Settings.canDrawOverlays(this)) {
+                Toast.makeText(
+                    this,
+                    "El overlay no se mostrará porque no se concedió ‘Mostrar sobre otras apps’. El Game Booster continuará normalmente.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             requestNotificationThenPlay(game)
-        } else if (game != null) {
-            Toast.makeText(
-                this,
-                "Activa ‘Mostrar sobre otras apps’ para ver FPS, RAM, batería y temperatura dentro del juego.",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
@@ -75,6 +76,8 @@ class GameLauncherActivity : ComponentActivity() {
                 isBoosterModeEnabled = viewModel::isBoosterModeEnabled,
                 onSelectProfile = viewModel::selectProfile,
                 onSelectBoosterMode = viewModel::selectBoosterMode,
+                onSetOverlayEnabled = viewModel::setOverlayEnabled,
+                onSetOverlayOpacity = viewModel::setOverlayOpacity,
                 onToggleDefault = viewModel::toggleDefaultProfile,
                 onPlay = ::requestPlay,
                 onRestore = viewModel::restoreNow,
@@ -104,7 +107,7 @@ class GameLauncherActivity : ComponentActivity() {
     }
 
     private fun requestPlay(game: SupportedGame) {
-        if (viewModel.requiresPerformanceOverlay() && !Settings.canDrawOverlays(this)) {
+        if (viewModel.requiresPerformanceOverlay(game) && !Settings.canDrawOverlays(this)) {
             pendingGame = game
             overlayPermissionLauncher.launch(
                 Intent(

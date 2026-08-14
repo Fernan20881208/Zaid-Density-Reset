@@ -33,7 +33,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -78,6 +80,8 @@ fun GameLauncherScreen(
     isBoosterModeEnabled: (BoosterMode) -> Boolean,
     onSelectProfile: (SupportedGame, DensityPreset) -> Unit,
     onSelectBoosterMode: (SupportedGame, BoosterMode) -> Unit,
+    onSetOverlayEnabled: (SupportedGame, Boolean) -> Unit,
+    onSetOverlayOpacity: (SupportedGame, Int) -> Unit,
     onToggleDefault: (SupportedGame) -> Unit,
     onPlay: (SupportedGame) -> Unit,
     onRestore: () -> Unit,
@@ -178,6 +182,8 @@ fun GameLauncherScreen(
                     isBoosterModeEnabled = isBoosterModeEnabled,
                     onSelectProfile = { onSelectProfile(game.game, it) },
                     onSelectBoosterMode = { onSelectBoosterMode(game.game, it) },
+                    onSetOverlayEnabled = { onSetOverlayEnabled(game.game, it) },
+                    onSetOverlayOpacity = { onSetOverlayOpacity(game.game, it) },
                     onToggleDefault = { onToggleDefault(game.game) },
                     onPlay = { onPlay(game.game) },
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -467,11 +473,16 @@ private fun GameCard(
     isBoosterModeEnabled: (BoosterMode) -> Boolean,
     onSelectProfile: (DensityPreset) -> Unit,
     onSelectBoosterMode: (BoosterMode) -> Unit,
+    onSetOverlayEnabled: (Boolean) -> Unit,
+    onSetOverlayOpacity: (Int) -> Unit,
     onToggleDefault: () -> Unit,
     onPlay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember(state.game) { mutableStateOf(false) }
+    var overlayOpacityDraft by remember(state.game, state.overlayOpacityPercent) {
+        mutableStateOf(state.overlayOpacityPercent.toFloat())
+    }
     val haptic = LocalHapticFeedback.current
     val shape = RoundedCornerShape(26.dp)
 
@@ -639,6 +650,59 @@ private fun GameCard(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSelectBoosterMode(mode)
                                 }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Mostrar overlay",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    if (state.overlayEnabled) {
+                                        "FPS, RAM, batería y temperatura sobre el juego"
+                                    } else {
+                                        "Oculto. Los monitores siguen funcionando."
+                                    },
+                                    color = Color(0xFFC6CFDD),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Switch(
+                                checked = state.overlayEnabled,
+                                onCheckedChange = { enabled ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSetOverlayEnabled(enabled)
+                                },
+                                enabled = !busy
+                            )
+                        }
+
+                        if (state.overlayEnabled) {
+                            Text(
+                                "Opacidad ${overlayOpacityDraft.roundToInt()}% · Transparencia ${100 - overlayOpacityDraft.roundToInt()}%",
+                                color = Color(0xFF9DEAF4),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Slider(
+                                value = overlayOpacityDraft,
+                                onValueChange = { overlayOpacityDraft = it },
+                                onValueChangeFinished = {
+                                    onSetOverlayOpacity(overlayOpacityDraft.roundToInt())
+                                },
+                                valueRange = 20f..100f,
+                                enabled = !busy
+                            )
+                            Text(
+                                "20% es muy transparente; 100% es completamente visible.",
+                                color = Color(0xFFC6CFDD),
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }

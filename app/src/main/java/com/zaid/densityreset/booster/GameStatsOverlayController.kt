@@ -40,9 +40,11 @@ class GameStatsOverlayController(context: Context) {
     fun canDraw(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(appContext)
 
-    fun start(): Boolean {
+    fun start(opacityPercent: Int = DEFAULT_OVERLAY_OPACITY_PERCENT): Boolean {
         if (!canDraw()) return false
-        if (root == null && !attachWindow()) return false
+        val normalizedOpacity = normalizeOverlayOpacity(opacityPercent)
+        if (root == null && !attachWindow(normalizedOpacity)) return false
+        root?.alpha = normalizedOpacity / 100f
 
         collectorJob?.cancel()
         collectorJob = scope.launch {
@@ -72,14 +74,15 @@ class GameStatsOverlayController(context: Context) {
         scope.cancel()
     }
 
-    private fun attachWindow(): Boolean = runCatching {
+    private fun attachWindow(opacityPercent: Int): Boolean = runCatching {
         val container = LinearLayout(appContext).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(9), dp(12), dp(9))
+            alpha = normalizeOverlayOpacity(opacityPercent) / 100f
             background = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
-                setColor(Color.argb(218, 15, 24, 37))
-                setStroke(dp(1), Color.argb(150, 157, 234, 244))
+                setColor(Color.rgb(15, 24, 37))
+                setStroke(dp(1), Color.argb(180, 157, 234, 244))
             }
         }
 
