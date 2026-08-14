@@ -1,0 +1,43 @@
+name: Lanzar Release 1.6.1
+
+on:
+  push:
+    branches:
+      - ops/remove-v160-release
+    paths:
+      - .github/workflows/dispatch-v161-release.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lanzar Publicar Density Reset sobre main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/dispatches" \
+            -f ref=main
+          echo "Workflow de publicación lanzado sobre main."
+
+      - name: Limpiar workflow temporal
+        uses: actions/checkout@v6
+        with:
+          ref: ops/remove-v160-release
+          fetch-depth: 0
+
+      - name: Eliminar dispatcher temporal
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/dispatch-v161-release.yml
+          git commit -m "ops: remove v1.6.1 release dispatcher"
+          git push origin HEAD:ops/remove-v160-release
