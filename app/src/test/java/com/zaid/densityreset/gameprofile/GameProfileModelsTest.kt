@@ -1,8 +1,10 @@
 package com.zaid.densityreset.gameprofile
 
 import com.zaid.densityreset.density.DensityPreset
+import com.zaid.densityreset.gameprofile.domain.DensityRestorationTarget
 import com.zaid.densityreset.gameprofile.domain.DensitySnapshot
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
+import com.zaid.densityreset.gameprofile.domain.restorationTarget
 import com.zaid.densityreset.gameprofile.service.DpiGameSessionService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,6 +59,10 @@ class GameProfileModelsTest {
         assertTrue(snapshot.hadOverride)
         assertEquals(320, snapshot.effectiveDensity)
         assertEquals(320, snapshot.previousOverrideDensity)
+        assertEquals(
+            DensityRestorationTarget.OverrideDensity(320),
+            snapshot.restorationTarget()
+        )
     }
 
     @Test
@@ -71,5 +77,43 @@ class GameProfileModelsTest {
         assertFalse(snapshot.hadOverride)
         assertEquals(snapshot.physicalDensity, snapshot.effectiveDensity)
         assertNull(snapshot.previousOverrideDensity)
+        assertEquals(
+            DensityRestorationTarget.PhysicalDensity,
+            snapshot.restorationTarget()
+        )
+    }
+
+    @Test
+    fun legacyOverrideSnapshotFallsBackToEffectiveDensity() {
+        val snapshot = DensitySnapshot(
+            physicalDensity = 440,
+            effectiveDensity = 360,
+            hadOverride = true,
+            previousOverrideDensity = null
+        )
+
+        assertEquals(
+            DensityRestorationTarget.OverrideDensity(360),
+            snapshot.restorationTarget()
+        )
+    }
+
+    @Test
+    fun missingOrInvalidSnapshotFallsBackToPhysicalDensity() {
+        assertEquals(
+            DensityRestorationTarget.PhysicalDensity,
+            null.restorationTarget()
+        )
+
+        val invalid = DensitySnapshot(
+            physicalDensity = 440,
+            effectiveDensity = 0,
+            hadOverride = true,
+            previousOverrideDensity = -1
+        )
+        assertEquals(
+            DensityRestorationTarget.PhysicalDensity,
+            invalid.restorationTarget()
+        )
     }
 }
