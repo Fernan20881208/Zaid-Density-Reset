@@ -124,6 +124,7 @@ object AppAppearanceViewController {
             aberrationIntensity = 1.4f
             enableDynamicBackground = true
             enableSensorHighlight = surface.tag == TAG_HEADER
+            enablePressEffect = false
             enableAdaptiveTint = false
             accessibilityMode = GlassAccessibilityMode.AUTO
             enableShadow = false
