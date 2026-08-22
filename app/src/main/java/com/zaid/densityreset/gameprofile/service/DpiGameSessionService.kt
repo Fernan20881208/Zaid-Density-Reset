@@ -27,9 +27,11 @@ import com.zaid.densityreset.density.ShizukuDensityController
 import com.zaid.densityreset.gameprofile.data.GameSessionRepository
 import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
 import com.zaid.densityreset.gameprofile.domain.DensitySnapshot
+import com.zaid.densityreset.gameprofile.domain.DensityRestorationTarget
 import com.zaid.densityreset.gameprofile.domain.GameSessionState
 import com.zaid.densityreset.gameprofile.domain.SessionStep
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
+import com.zaid.densityreset.gameprofile.domain.restorationTarget
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuCommandExecutor
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
 import com.zaid.densityreset.icons.DensityIconInvalidationCoordinator
@@ -371,10 +373,10 @@ class DpiGameSessionService : Service() {
         val session = repository.read()
         if (!session.sessionActive) return
 
-        val reset = executeWmDensityReset()
-        if (reset.isFailure) {
+        val densityRestore = executeDensityRestoration(session.snapshot)
+        if (densityRestore.isFailure) {
             val boosterRestore = boosterManager.restore()
-            val message = reset.exceptionOrNull()?.message
+            val message = densityRestore.exceptionOrNull()?.message
                 ?: getString(R.string.game_session_restore_failed)
             repository.markRestorationFailure(
                 if (boosterRestore is BoosterResult.Failure) {
@@ -477,8 +479,9 @@ class DpiGameSessionService : Service() {
     private suspend fun abortAndRestoreAll(message: String) {
         timerJob?.cancel()
         gameWatchJob?.cancel()
+        val session = repository.read()
         val booster = boosterManager.restore()
-        val density = executeWmDensityReset()
+        val density = executeDensityRestoration(session.snapshot)
         if (booster !is BoosterResult.Failure && density.isSuccess) {
             repository.failAndClear(message)
             DpiGameLockBridge.notifySessionChanged()
@@ -516,7 +519,7 @@ class DpiGameSessionService : Service() {
         )
 
         val booster = boosterManager.restore()
-        val density = executeWmDensityReset()
+        val density = executeDensityRestoration(session.snapshot)
         if (booster !is BoosterResult.Failure && density.isSuccess) {
             repository.finishSession("DPI y Game Booster restaurados correctamente.")
             DpiGameLockBridge.notifySessionChanged()
@@ -539,10 +542,40 @@ class DpiGameSessionService : Service() {
         }
     }
 
+    private suspend fun executeDensityRestoration(
+        snapshot: DensitySnapshot?
+    ): Result<Unit> {
+        return when (val target = snapshot.restorationTarget()) {
+            DensityRestorationTarget.PhysicalDensity -> executeWmDensityReset()
+            is DensityRestorationTarget.OverrideDensity -> {
+                restoreDensityOverride(target.density)
+            }
+        }
+    }
+
+    private suspend fun restoreDensityOverride(density: Int): Result<Unit> {
+        densityController.applyDensity(density).getOrElse {
+            return Result.failure(it)
+        }
+
+        val verified = densityController.getSystemState().getOrElse {
+            return Result.failure(it)
+        }
+        if (!verified.hasOverride || verified.currentDensity != density) {
+            return Result.failure(
+                IllegalStateException(
+                    "Se intentó restaurar el override de $density DPI, pero WindowManager " +
+                        "reportó ${verified.currentDensity} DPI."
+                )
+            )
+        }
+        return Result.success(Unit)
+    }
+
     /**
-     * The primary density restoration remains the literal command required by
-     * the product: `/system/bin/wm density reset` through Shizuku, followed by
-     * a real WindowManager state verification.
+     * Restores the physical density when the saved snapshot confirms there was
+     * no pre-existing override. The command runs through Shizuku and is
+     * followed by a real WindowManager state verification.
      */
     private suspend fun executeWmDensityReset(): Result<Unit> {
         val before = densityController.getSystemState().getOrNull()
