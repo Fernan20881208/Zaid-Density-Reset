@@ -18,6 +18,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.MainActivity
+import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.AppAppearancePreferences
+import com.zaid.densityreset.appearance.AppAppearanceViewController
+import com.zaid.densityreset.appearance.DensityResetAppearance
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.startup.StartupActivity
 import com.zaid.densityreset.startup.StartupCoordinator
@@ -26,6 +30,7 @@ import kotlinx.coroutines.launch
 class GameLauncherActivity : ComponentActivity() {
 
     private val viewModel: GameLauncherViewModel by viewModels()
+    private lateinit var appearanceMode: AppAppearanceMode
     private var pendingGame: SupportedGame? = null
 
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -62,30 +67,36 @@ class GameLauncherActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appearanceMode = AppAppearancePreferences.get(this)
+        AppAppearanceViewController.applyActivityTheme(this, appearanceMode)
         super.onCreate(savedInstanceState)
+        AppAppearanceViewController.applyWindow(this, appearanceMode)
         if (!StartupCoordinator.isReady()) {
             redirectToStartup()
             return
         }
 
         setContent {
-            val state = viewModel.uiState.collectAsStateWithLifecycle().value
-            GameLauncherScreen(
-                state = state,
-                isPresetEnabled = viewModel::isPresetEnabled,
-                isBoosterModeEnabled = viewModel::isBoosterModeEnabled,
-                onSelectProfile = viewModel::selectProfile,
-                onSelectBoosterMode = viewModel::selectBoosterMode,
-                onSetOverlayEnabled = viewModel::setOverlayEnabled,
-                onSetOverlayOpacity = viewModel::setOverlayOpacity,
-                onToggleDefault = viewModel::toggleDefaultProfile,
-                onPlay = ::requestPlay,
-                onRestore = viewModel::restoreNow,
-                onRedetectDevice = viewModel::redetectDevice,
-                onOpenLegacyControls = {
-                    startActivity(Intent(this, MainActivity::class.java))
-                }
-            )
+            DensityResetAppearance(appearanceMode) {
+                val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                GameLauncherScreen(
+                    state = state,
+                    isPresetEnabled = viewModel::isPresetEnabled,
+                    isBoosterModeEnabled = viewModel::isBoosterModeEnabled,
+                    onSelectProfile = viewModel::selectProfile,
+                    onSelectBoosterMode = viewModel::selectBoosterMode,
+                    onSetOverlayEnabled = viewModel::setOverlayEnabled,
+                    onSetOverlayOpacity = viewModel::setOverlayOpacity,
+                    onToggleDefault = viewModel::toggleDefaultProfile,
+                    onPlay = ::requestPlay,
+                    onRestore = viewModel::restoreNow,
+                    onRedetectDevice = viewModel::redetectDevice,
+                    onAppearanceModeChange = ::changeAppearanceMode,
+                    onOpenLegacyControls = {
+                        startActivity(Intent(this, MainActivity::class.java))
+                    }
+                )
+            }
         }
 
         lifecycleScope.launch {
@@ -118,6 +129,12 @@ class GameLauncherActivity : ComponentActivity() {
             return
         }
         requestNotificationThenPlay(game)
+    }
+
+    private fun changeAppearanceMode(mode: AppAppearanceMode) {
+        if (mode == appearanceMode) return
+        AppAppearancePreferences.set(this, mode)
+        recreate()
     }
 
     private fun requestNotificationThenPlay(game: SupportedGame) {

@@ -28,8 +28,8 @@ android {
         applicationId = "com.zaidnavarro.ds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "1.6.1"
+        versionCode = 18
+        versionName = "1.7.0"
 
         buildConfigField("String", "LICENSE_API_URL", "\"$licenseApiUrl\"")
         buildConfigField("long", "LICENSE_OFFLINE_GRACE_HOURS", "12L")
@@ -177,6 +177,7 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
+    implementation("com.github.QWEA0:liquidglass:v2.0.2")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.13.0")

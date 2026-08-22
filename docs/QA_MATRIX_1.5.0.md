@@ -16,6 +16,12 @@ This matrix distinguishes automated/static validation from Android device valida
 | Remote density values | Valid values replace fallback; invalid values revert to 20/72/280 | Unit test |
 | Remote session duration | New sessions use validated 5–150 second duration and persist restoreAt | Unit/static + device |
 | Remote announcement | Liquid Glass announcement card appears only when enabled | Device |
+| Appearance default | Fresh/unknown preference opens in Liquid Glass mode | Unit + device |
+| AMOLED persistence | Selecting AMOLED survives Activity recreation and a full app restart | Unit + device |
+| AMOLED rendering | Background and system bars are pure black; panels remain readable and opaque | Device |
+| Liquid Glass View rendering | XML panels refract the real background and continue updating while scrolling | Device |
+| Liquid Glass accessibility | Reduced motion, battery saver and high contrast use the upstream automatic fallback | Device |
+| Appearance across gates | Startup, update, license, launcher and classic controls use the same saved mode | Device |
 | Remote Config available | Live config replaces cache and persists locally | Backend + device |
 | Remote Config unavailable | Cached noncritical config can render; security startup gate follows verified fallback rules | Device/network fault |
 | Maintenance mode | No launcher; only maintenance screen and retry | Device/backend |

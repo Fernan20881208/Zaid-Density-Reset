@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -56,6 +56,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,12 @@ import com.zaid.densityreset.booster.RamInfo
 import com.zaid.densityreset.booster.RamLevel
 import com.zaid.densityreset.booster.ThermalInfo
 import com.zaid.densityreset.booster.ThermalLevel
+import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.LocalAppAppearanceMode
+import com.zaid.densityreset.appearance.appearanceBackground
+import com.zaid.densityreset.appearance.appearanceBorderColor
+import com.zaid.densityreset.appearance.appearancePanelColor
+import com.zaid.densityreset.appearance.appearanceSubcardColor
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.icons.AppIconRepositoryProvider
@@ -86,16 +93,14 @@ fun GameLauncherScreen(
     onPlay: (SupportedGame) -> Unit,
     onRestore: () -> Unit,
     onRedetectDevice: () -> Unit,
+    onAppearanceModeChange: (AppAppearanceMode) -> Unit,
     onOpenLegacyControls: () -> Unit
 ) {
+    val appearanceMode = LocalAppAppearanceMode.current
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF07101F), Color(0xFF172B47), Color(0xFF080D17))
-                )
-            )
+            .background(appearanceBackground(appearanceMode))
     ) {
         LazyColumn(
             modifier = Modifier
@@ -122,6 +127,10 @@ fun GameLauncherScreen(
                         "Elige el juego, sensibilidad y Game Booster. La app detecta automáticamente qué funciones admite tu dispositivo.",
                         color = Color(0xFFC6CFDD),
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                    AppearanceModeSelector(
+                        selectedMode = appearanceMode,
+                        onModeSelected = onAppearanceModeChange
                     )
                 }
             }
@@ -479,6 +488,7 @@ private fun GameCard(
     onPlay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val appearanceMode = LocalAppAppearanceMode.current
     var expanded by remember(state.game) { mutableStateOf(false) }
     var overlayOpacityDraft by remember(state.game, state.overlayOpacityPercent) {
         mutableStateOf(state.overlayOpacityPercent.toFloat())
@@ -490,9 +500,9 @@ private fun GameCard(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(spring())
-            .border(1.dp, Color(0x84C8E5FF), shape)
+            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
             .clip(shape),
-        color = Color(0x9615253B),
+        color = appearancePanelColor(appearanceMode),
         contentColor = Color.White
     ) {
         Column(
@@ -628,8 +638,15 @@ private fun GameCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0x55243D59), RoundedCornerShape(20.dp))
-                            .border(1.dp, Color(0x55C8E5FF), RoundedCornerShape(20.dp))
+                            .background(
+                                appearanceSubcardColor(appearanceMode),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .border(
+                                1.dp,
+                                appearanceBorderColor(appearanceMode),
+                                RoundedCornerShape(20.dp)
+                            )
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -728,12 +745,16 @@ private fun BoosterModeRow(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val appearanceMode = LocalAppAppearanceMode.current
     val shape = RoundedCornerShape(18.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected) Color(0x84345B7B) else Color(0x42182A42))
+            .background(
+                if (selected) Color(0x84345B7B)
+                else appearanceSubcardColor(appearanceMode)
+            )
             .border(1.dp, if (selected) Color(0xD09DEAF4) else Color(0x50FFFFFF), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 11.dp),
@@ -771,12 +792,16 @@ private fun ProfileRow(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val appearanceMode = LocalAppAppearanceMode.current
     val shape = RoundedCornerShape(18.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected) Color(0x84345B7B) else Color(0x62182A42))
+            .background(
+                if (selected) Color(0x84345B7B)
+                else appearanceSubcardColor(appearanceMode)
+            )
             .border(1.dp, if (selected) Color(0xD09DEAF4) else Color(0x70FFFFFF), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -952,14 +977,67 @@ private fun GlassPanel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val appearanceMode = LocalAppAppearanceMode.current
     val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0x9615253B), shape)
-            .border(1.dp, Color(0x84C8E5FF), shape)
+            .background(appearancePanelColor(appearanceMode), shape)
+            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content
     )
+}
+
+@Composable
+private fun AppearanceModeSelector(
+    selectedMode: AppAppearanceMode,
+    onModeSelected: (AppAppearanceMode) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        AppAppearanceMode.entries.forEach { mode ->
+            val selected = mode == selectedMode
+            val shape = RoundedCornerShape(16.dp)
+            val label = when (mode) {
+                AppAppearanceMode.LIQUID_GLASS -> "Liquid Glass"
+                AppAppearanceMode.AMOLED -> "AMOLED"
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(shape)
+                    .background(
+                        if (selected) Color(0x66345B7B)
+                        else appearanceSubcardColor(selectedMode),
+                        shape
+                    )
+                    .border(
+                        1.dp,
+                        if (selected) Color(0xFF9DEAF4)
+                        else appearanceBorderColor(selectedMode),
+                        shape
+                    )
+                    .selectable(
+                        selected = selected,
+                        role = Role.RadioButton,
+                        onClick = { onModeSelected(mode) }
+                    )
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (selected) "● $label" else "○ $label",
+                    color = if (selected) Color(0xFF9DEAF4) else Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
 }

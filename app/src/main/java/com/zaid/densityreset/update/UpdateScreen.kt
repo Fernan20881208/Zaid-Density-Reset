@@ -31,11 +31,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zaid.densityreset.BuildConfig
+import com.zaid.densityreset.appearance.LocalAppAppearanceMode
+import com.zaid.densityreset.appearance.appearanceBackground
+import com.zaid.densityreset.appearance.appearanceBorderColor
+import com.zaid.densityreset.appearance.appearancePanelColor
 import kotlin.math.max
 
 @Composable
@@ -48,9 +51,8 @@ fun UpdateScreen(
     BackHandler(enabled = true) { }
 
     val release = state.release ?: return
-    val background = Brush.verticalGradient(
-        listOf(Color(0xFF07101F), Color(0xFF172B47), Color(0xFF080D17))
-    )
+    val appearanceMode = LocalAppAppearanceMode.current
+    val background = appearanceBackground(appearanceMode)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -243,12 +245,13 @@ private fun UpdateProgress(state: UpdateUiState) {
 
 @Composable
 private fun UpdateGlassCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val appearanceMode = LocalAppAppearanceMode.current
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0x9615253B), shape)
-            .border(1.dp, Color(0x84C8E5FF), shape)
+            .background(appearancePanelColor(appearanceMode), shape)
+            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content

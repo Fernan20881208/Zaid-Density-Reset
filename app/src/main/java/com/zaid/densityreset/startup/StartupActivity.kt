@@ -11,6 +11,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.MainActivity
+import com.zaid.densityreset.appearance.AppAppearancePreferences
+import com.zaid.densityreset.appearance.AppAppearanceViewController
+import com.zaid.densityreset.appearance.DensityResetAppearance
 import com.zaid.densityreset.launcher.GameLauncherActivity
 import com.zaid.densityreset.license.ui.LicenseGateActivity
 import com.zaid.densityreset.update.UpdateScreen
@@ -25,24 +28,29 @@ class StartupActivity : ComponentActivity() {
     private var licenseOpened = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val appearanceMode = AppAppearancePreferences.get(this)
+        AppAppearanceViewController.applyActivityTheme(this, appearanceMode)
         super.onCreate(savedInstanceState)
+        AppAppearanceViewController.applyWindow(this, appearanceMode)
         resolveDestination(intent)
 
         setContent {
-            val gate = StartupCoordinator.gate.collectAsStateWithLifecycle().value
-            if (gate is StartupGate.UpdateRequired) {
-                LaunchedEffect(gate.release.releaseId, gate.release.versionCode) {
-                    updateViewModel.setRelease(gate.release)
+            DensityResetAppearance(appearanceMode) {
+                val gate = StartupCoordinator.gate.collectAsStateWithLifecycle().value
+                if (gate is StartupGate.UpdateRequired) {
+                    LaunchedEffect(gate.release.releaseId, gate.release.versionCode) {
+                        updateViewModel.setRelease(gate.release)
+                    }
+                    val updateState = updateViewModel.uiState.collectAsStateWithLifecycle().value
+                    UpdateScreen(
+                        state = updateState,
+                        onDownload = updateViewModel::download,
+                        onInstall = { updateViewModel.install(this) },
+                        onRetryCheck = ::retryStartup
+                    )
+                } else {
+                    StartupScreen(gate = gate, onRetry = ::retryStartup)
                 }
-                val updateState = updateViewModel.uiState.collectAsStateWithLifecycle().value
-                UpdateScreen(
-                    state = updateState,
-                    onDownload = updateViewModel::download,
-                    onInstall = { updateViewModel.install(this) },
-                    onRetryCheck = ::retryStartup
-                )
-            } else {
-                StartupScreen(gate = gate, onRetry = ::retryStartup)
             }
         }
 

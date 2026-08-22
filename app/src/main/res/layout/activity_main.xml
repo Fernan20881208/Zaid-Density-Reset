@@ -15,6 +15,7 @@
         android:scaleType="centerCrop" />
 
     <View
+        android:id="@+id/backgroundScrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#42040B16"
@@ -35,7 +36,8 @@
             android:background="@drawable/bg_glass_header"
             android:contentInsetStart="0dp"
             android:contentInsetEnd="0dp"
-            android:elevation="0dp">
+            android:elevation="0dp"
+            android:tag="appearance_glass_header">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -98,7 +100,8 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_glass_panel"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:tag="appearance_glass_panel">
 
                     <TextView
                         android:layout_width="match_parent"
@@ -209,7 +212,8 @@
                     android:layout_marginTop="14dp"
                     android:background="@drawable/bg_glass_panel"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:tag="appearance_glass_panel">
 
                     <TextView
                         android:layout_width="match_parent"
@@ -272,7 +276,8 @@
                     android:layout_marginTop="14dp"
                     android:background="@drawable/bg_glass_panel"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:tag="appearance_glass_panel">
 
                     <TextView
                         android:layout_width="match_parent"
@@ -281,6 +286,48 @@
                         android:text="@string/section_settings"
                         android:textColor="@color/glass_text_primary"
                         android:textSize="19sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/appearance_title"
+                        android:textColor="@color/glass_text_primary"
+                        android:textSize="15sp" />
+
+                    <RadioGroup
+                        android:id="@+id/appearanceModeGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <androidx.appcompat.widget.AppCompatRadioButton
+                            android:id="@+id/radioLiquidGlass"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:buttonTint="@color/glass_accent_secondary"
+                            android:text="@string/appearance_liquid_glass"
+                            android:textColor="@color/glass_text_primary" />
+
+                        <androidx.appcompat.widget.AppCompatRadioButton
+                            android:id="@+id/radioAmoled"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:buttonTint="@color/glass_accent_secondary"
+                            android:text="@string/appearance_amoled"
+                            android:textColor="@color/glass_text_primary" />
+                    </RadioGroup>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/appearance_summary"
+                        android:textColor="@color/glass_text_muted"
+                        android:textSize="12sp" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -337,7 +384,8 @@
                     android:layout_marginTop="14dp"
                     android:background="@drawable/bg_glass_panel"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:tag="appearance_glass_panel">
 
                     <TextView
                         android:layout_width="match_parent"
@@ -389,7 +437,8 @@
                     android:background="@drawable/bg_glass_panel"
                     android:gravity="center_horizontal"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:tag="appearance_glass_panel">
 
                     <TextView
                         android:layout_width="match_parent"

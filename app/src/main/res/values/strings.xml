@@ -6,6 +6,10 @@
     <string name="section_shizuku">Estado de Shizuku</string>
     <string name="section_accessibility">Atajo de accesibilidad</string>
     <string name="section_settings">Preferencias</string>
+    <string name="appearance_title">Apariencia</string>
+    <string name="appearance_liquid_glass">Liquid Glass</string>
+    <string name="appearance_amoled">AMOLED</string>
+    <string name="appearance_summary">Liquid Glass usa refracción y desenfoque dinámicos. AMOLED utiliza negro puro para pantallas OLED.</string>
     <string name="section_multi_dpi">DPI múltiple</string>
     <string name="section_game_profiles">Perfiles por juego</string>
     <string name="section_test">Prueba rápida</string>

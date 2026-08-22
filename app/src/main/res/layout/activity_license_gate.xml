@@ -15,6 +15,7 @@
         android:scaleType="centerCrop" />
 
     <View
+        android:id="@+id/licenseBackgroundScrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#62040B16"
@@ -30,6 +31,7 @@
         android:paddingVertical="28dp">
 
         <LinearLayout
+            android:id="@+id/licenseCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
@@ -37,7 +39,8 @@
             android:clipToOutline="true"
             android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:padding="24dp"
+            android:tag="appearance_glass_panel">
 
             <ImageView
                 android:id="@+id/licenseLogo"

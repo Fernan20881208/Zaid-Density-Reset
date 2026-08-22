@@ -9,8 +9,26 @@ Aplicación Android en Kotlin para controlar la densidad lógica mediante Shizuk
 - 20 DPI mediante Binder interno de WindowManager con identidad `shell` de Shizuku; nunca mediante `wm size`.
 - Snapshot exacto del DPI anterior, foreground service de 30 segundos, notificación y restauración automática/manual.
 - Gesto de emergencia con ambos botones de volumen.
-- Logo `file (1).svg`, fondo `file.svg` y UI Liquid Glass.
+- Selector global de apariencia con modo AMOLED de negro puro y modo Liquid Glass predeterminado.
+- Refracción Liquid Glass real en pantallas View/XML mediante
+  [`QWEA0/Liquid-Glass-Android`](https://github.com/QWEA0/Liquid-Glass-Android), con AGSL en
+  Android 13+ y fallback compatible desde API 24.
+- Logo `file (1).svg`, fondo `file.svg` y estilo equivalente en las pantallas Compose, sin envolver
+  Compose en `AndroidView`.
 - Acceso protegido mediante licencias administradas por servidor.
+
+## Apariencia 1.7.0
+
+La opción se guarda en preferencias y se aplica al arranque, licencia, actualización, Game Launcher
+y controles clásicos:
+
+- **Liquid Glass**: opción predeterminada; usa fondo detallado, paneles refractivos dinámicos,
+  dispersión moderada, brillo por sensor y fallback automático de accesibilidad.
+- **AMOLED**: fondo `#000000`, barras del sistema negras y paneles opacos oscuros para conservar
+  píxeles negros en pantallas OLED.
+
+La dependencia de Liquid Glass está fijada a `v2.0.2`. Consulta
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) para la atribución.
 
 # Sistema de licencias 1.4.0
 
