@@ -746,6 +746,7 @@ private fun GameCard(
         }
     }
 }
+}
 
 @Composable
 private fun BoosterModeRow(

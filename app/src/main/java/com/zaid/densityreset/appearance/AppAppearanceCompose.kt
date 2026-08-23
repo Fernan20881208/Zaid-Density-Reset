@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -173,7 +172,7 @@ fun DensityResetGlassPanel(
             .clip(shape)
     ) {
         Qwea0LiquidGlassBackdrop(
-            modifier = Modifier.matchParentSize(),
+            modifier = Modifier.fillMaxSize(),
             cornerRadius = cornerRadius
         )
         Column(
