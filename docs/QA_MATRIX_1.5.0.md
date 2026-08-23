@@ -19,7 +19,9 @@ This matrix distinguishes automated/static validation from Android device valida
 | Appearance default | Fresh/unknown preference opens in Liquid Glass mode | Unit + device |
 | AMOLED persistence | Selecting AMOLED survives Activity recreation and a full app restart | Unit + device |
 | AMOLED rendering | Background and system bars are pure black; panels remain readable and opaque | Device |
-| Liquid Glass View rendering | XML panels refract the real background and continue updating while scrolling | Device |
+| Liquid Glass View rendering | XML panels and custom dialogs instantiate QWEA0 `LiquidGlassView`, refract the real activity background and continue updating while scrolling | Device |
+| Liquid Glass Compose rendering | Startup, mandatory update and Game Launcher main panels render actual passive QWEA0 `LiquidGlassView` surfaces rather than a color-only imitation | Static + device |
+| Liquid Glass Compose input | Launcher scrolling, card expansion, sliders, switches and buttons remain fully responsive above passive glass surfaces | Device |
 | Liquid Glass accessibility | Reduced motion, battery saver and high contrast use the upstream automatic fallback | Device |
 | Appearance across gates | Startup, update, license, launcher and classic controls use the same saved mode | Device |
 | Remote Config available | Live config replaces cache and persists locally | Backend + device |

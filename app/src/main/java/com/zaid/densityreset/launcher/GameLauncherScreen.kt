@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -68,10 +69,10 @@ import com.zaid.densityreset.booster.RamLevel
 import com.zaid.densityreset.booster.ThermalInfo
 import com.zaid.densityreset.booster.ThermalLevel
 import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.DensityResetGlassPanel
 import com.zaid.densityreset.appearance.LocalAppAppearanceMode
 import com.zaid.densityreset.appearance.appearanceBackground
 import com.zaid.densityreset.appearance.appearanceBorderColor
-import com.zaid.densityreset.appearance.appearancePanelColor
 import com.zaid.densityreset.appearance.appearanceSubcardColor
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
@@ -110,11 +111,13 @@ fun GameLauncherScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                GlassPanel(
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 20.dp,
+                        bottom = 0.dp
+                    )
                 ) {
                     Text("Density Reset", color = Color(0xFFE8EDF5))
                     Text(
@@ -200,18 +203,22 @@ fun GameLauncherScreen(
             }
 
             item {
-                Button(
-                    onClick = onOpenLegacyControls,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .heightIn(min = 48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0x5C375374),
-                        contentColor = Color.White
-                    )
+                GlassPanel(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(6.dp)
                 ) {
-                    Text("CONTROLES Y AJUSTES")
+                    Button(
+                        onClick = onOpenLegacyControls,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0x5C375374),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("CONTROLES Y AJUSTES")
+                    }
                 }
             }
             item { Spacer(Modifier.heightIn(min = 24.dp)) }
@@ -494,63 +501,65 @@ private fun GameCard(
         mutableStateOf(state.overlayOpacityPercent.toFloat())
     }
     val haptic = LocalHapticFeedback.current
-    val shape = RoundedCornerShape(26.dp)
 
-    Surface(
+    DensityResetGlassPanel(
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(spring())
-            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
-            .clip(shape),
-        color = appearancePanelColor(appearanceMode),
-        contentColor = Color.White
+            .animateContentSize(spring()),
+        cornerRadius = 26.dp,
+        contentPadding = PaddingValues(0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !busy) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    expanded = !expanded
-                }
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.Transparent,
+            contentColor = Color.White
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !busy) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        expanded = !expanded
+                    }
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                GameIcon(
-                    packageName = state.packageName,
-                    versionCode = state.versionCode,
-                    lastUpdateTime = state.lastUpdateTime,
-                    installed = state.installed,
-                    fallback = state.applicationName.take(2).uppercase()
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        state.applicationName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    GameIcon(
+                        packageName = state.packageName,
+                        versionCode = state.versionCode,
+                        lastUpdateTime = state.lastUpdateTime,
+                        installed = state.installed,
+                        fallback = state.applicationName.take(2).uppercase()
                     )
-                    Text(
-                        state.packageName,
-                        color = Color(0xFFC6CFDD),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            state.applicationName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            state.packageName,
+                            color = Color(0xFFC6CFDD),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    AnimatedContent(state.installed, label = "installation") { installed ->
+                        Text(
+                            if (installed) "● Instalado" else "○ No instalado",
+                            color = if (installed) Color(0xFF98F0BC) else Color(0xFFFFD28E),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 }
-                AnimatedContent(state.installed, label = "installation") { installed ->
-                    Text(
-                        if (installed) "● Instalado" else "○ No instalado",
-                        color = if (installed) Color(0xFF98F0BC) else Color(0xFFFFD28E),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-            }
 
             if (!state.enabled) {
                 Text("Temporalmente no disponible", color = Color(0xFFFFD28E))
@@ -975,16 +984,14 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun GlassPanel(
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(18.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val appearanceMode = LocalAppAppearanceMode.current
-    val shape = RoundedCornerShape(24.dp)
-    Column(
+    DensityResetGlassPanel(
         modifier = modifier
-            .fillMaxWidth()
-            .background(appearancePanelColor(appearanceMode), shape)
-            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
-            .padding(18.dp),
+            .fillMaxWidth(),
+        cornerRadius = 24.dp,
+        contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content
     )

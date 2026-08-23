@@ -10,11 +10,11 @@ Aplicación Android en Kotlin para controlar la densidad lógica mediante Shizuk
 - Snapshot exacto del DPI anterior, foreground service de 30 segundos, notificación y restauración automática/manual.
 - Gesto de emergencia con ambos botones de volumen.
 - Selector global de apariencia con modo AMOLED de negro puro y modo Liquid Glass predeterminado.
-- Refracción Liquid Glass real en pantallas View/XML mediante
+- Refracción Liquid Glass real en pantallas View/XML y Compose mediante
   [`QWEA0/Liquid-Glass-Android`](https://github.com/QWEA0/Liquid-Glass-Android), con AGSL en
   Android 13+ y fallback compatible desde API 24.
-- Logo `file (1).svg`, fondo `file.svg` y estilo equivalente en las pantallas Compose, sin envolver
-  Compose en `AndroidView`.
+- Logo `file (1).svg`, fondo `file.svg` y superficies `LiquidGlassView` pasivas detrás de los
+  paneles Compose; el contenido y los gestos siguen siendo propiedad de Compose.
 - Acceso protegido mediante licencias administradas por servidor.
 
 ## Apariencia 1.7.0
@@ -22,8 +22,9 @@ Aplicación Android en Kotlin para controlar la densidad lógica mediante Shizuk
 La opción se guarda en preferencias y se aplica al arranque, licencia, actualización, Game Launcher
 y controles clásicos:
 
-- **Liquid Glass**: opción predeterminada; usa fondo detallado, paneles refractivos dinámicos,
-  dispersión moderada, brillo por sensor y fallback automático de accesibilidad.
+- **Liquid Glass**: opción predeterminada; usa el motor QWEA0 en los paneles de toda la interfaz,
+  con fondo detallado, refracción dinámica, dispersión moderada, brillo por sensor limitado al
+  encabezado y fallback automático de accesibilidad.
 - **AMOLED**: fondo `#000000`, barras del sistema negras y paneles opacos oscuros para conservar
   píxeles negros en pantallas OLED.
 

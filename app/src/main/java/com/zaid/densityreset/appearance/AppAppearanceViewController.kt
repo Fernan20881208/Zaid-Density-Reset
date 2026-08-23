@@ -1,9 +1,12 @@
 package com.zaid.densityreset.appearance
 
 import android.app.Activity
+import android.app.Dialog
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.core.view.WindowInsetsControllerCompat
@@ -76,6 +79,34 @@ object AppAppearanceViewController {
         }
     }
 
+    /**
+     * Applies the selected appearance to custom dialog content. LiquidGlassView
+     * must capture the activity hierarchy rather than its own dialog window.
+     */
+    fun applyDialogSurface(
+        dialog: Dialog,
+        surface: View,
+        backdropSource: View,
+        mode: AppAppearanceMode
+    ) {
+        dialog.window?.apply {
+            setWindowAnimations(0)
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0f }
+        }
+
+        if (mode == AppAppearanceMode.AMOLED) {
+            applyAmoledSurface(surface)
+        } else {
+            wrapInLiquidGlass(
+                surface = surface,
+                sourceView = backdropSource,
+                dynamicBackground = false
+            )
+        }
+    }
+
     private fun collectTaggedSurfaces(view: View, output: MutableList<View>) {
         val appearanceTag = view.tag as? String
         if (appearanceTag == TAG_HEADER || appearanceTag == TAG_PANEL || appearanceTag == TAG_SUBCARD) {
@@ -98,7 +129,11 @@ object AppAppearanceViewController {
         )
     }
 
-    private fun wrapInLiquidGlass(surface: View, sourceView: View) {
+    private fun wrapInLiquidGlass(
+        surface: View,
+        sourceView: View,
+        dynamicBackground: Boolean = true
+    ) {
         val parent = surface.parent as? ViewGroup ?: return
         if (parent is LiquidGlassView) return
 
@@ -122,7 +157,7 @@ object AppAppearanceViewController {
             blurAmount = 0.055f
             saturation = 125f
             aberrationIntensity = 1.4f
-            enableDynamicBackground = true
+            enableDynamicBackground = dynamicBackground
             enableSensorHighlight = surface.tag == TAG_HEADER
             enablePressEffect = false
             enableAdaptiveTint = false

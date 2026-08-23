@@ -8,10 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,10 +34,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zaid.densityreset.BuildConfig
+import com.zaid.densityreset.appearance.DensityResetGlassPanel
 import com.zaid.densityreset.appearance.LocalAppAppearanceMode
 import com.zaid.densityreset.appearance.appearanceBackground
-import com.zaid.densityreset.appearance.appearanceBorderColor
-import com.zaid.densityreset.appearance.appearancePanelColor
 import kotlin.math.max
 
 @Composable
@@ -67,7 +65,7 @@ fun UpdateScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            UpdateGlassCard {
                 Text(
                     text = "Density Reset",
                     color = Color(0xFFE8EDF5),
@@ -245,14 +243,10 @@ private fun UpdateProgress(state: UpdateUiState) {
 
 @Composable
 private fun UpdateGlassCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val appearanceMode = LocalAppAppearanceMode.current
-    val shape = RoundedCornerShape(28.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(appearancePanelColor(appearanceMode), shape)
-            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
-            .padding(20.dp),
+    DensityResetGlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 28.dp,
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content
     )

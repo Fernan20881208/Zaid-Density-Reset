@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-medium"
-        android:text="@string/very_high_confirmation_title"
+        android:text="@string/license_logout_title"
         android:textColor="@color/glass_text_primary"
         android:textSize="21sp" />
 
@@ -21,25 +21,25 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:lineSpacingExtra="2dp"
-        android:text="@string/very_high_confirmation_warning"
+        android:text="@string/license_logout_confirmation"
         android:textColor="@color/glass_text_secondary"
         android:textSize="14sp" />
 
     <androidx.appcompat.widget.AppCompatButton
-        android:id="@+id/buttonApplyVeryHigh"
+        android:id="@+id/buttonConfirmLicenseLogout"
         android:layout_width="match_parent"
         android:layout_height="58dp"
         android:layout_marginTop="18dp"
         android:background="@drawable/bg_glass_button_primary"
         android:fontFamily="sans-serif-medium"
         android:stateListAnimator="@null"
-        android:text="@string/apply_very_high"
+        android:text="@string/license_logout_button"
         android:textAllCaps="false"
         android:textColor="@color/glass_button_text"
         app:backgroundTint="@null" />
 
     <androidx.appcompat.widget.AppCompatButton
-        android:id="@+id/buttonCancelVeryHigh"
+        android:id="@+id/buttonCancelLicenseLogout"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="10dp"

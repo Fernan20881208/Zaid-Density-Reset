@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -682,7 +681,6 @@ class MainActivity : AppCompatActivity() {
         val dialogBinding = DialogVeryHighConfirmationBinding.inflate(layoutInflater)
         dialog.setContentView(dialogBinding.root)
         dialog.setCancelable(true)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialogBinding.buttonApplyVeryHigh.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             dialog.dismiss()
@@ -690,6 +688,12 @@ class MainActivity : AppCompatActivity() {
         }
         dialogBinding.buttonCancelVeryHigh.setOnClickListener { dialog.dismiss() }
         dialog.show()
+        AppAppearanceViewController.applyDialogSurface(
+            dialog = dialog,
+            surface = dialogBinding.root,
+            backdropSource = binding.root,
+            mode = appearanceMode
+        )
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.92f).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -701,7 +705,6 @@ class MainActivity : AppCompatActivity() {
         val dialogBinding = DialogUltraConfirmationBinding.inflate(layoutInflater)
         dialog.setContentView(dialogBinding.root)
         dialog.setCancelable(true)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         val handler = Handler(Looper.getMainLooper())
         var confirmed = false
@@ -751,6 +754,12 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnDismissListener { resetHoldState() }
 
         dialog.show()
+        AppAppearanceViewController.applyDialogSurface(
+            dialog = dialog,
+            surface = dialogBinding.root,
+            backdropSource = binding.root,
+            mode = appearanceMode
+        )
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.92f).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT

@@ -3,16 +3,14 @@ package com.zaid.densityreset.startup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,10 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.zaid.densityreset.appearance.DensityResetGlassPanel
 import com.zaid.densityreset.appearance.LocalAppAppearanceMode
 import com.zaid.densityreset.appearance.appearanceBackground
-import com.zaid.densityreset.appearance.appearanceBorderColor
-import com.zaid.densityreset.appearance.appearancePanelColor
 
 @Composable
 fun StartupScreen(
@@ -104,16 +101,13 @@ fun StartupScreen(
 
 @Composable
 private fun GateCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val appearanceMode = LocalAppAppearanceMode.current
-    val shape = RoundedCornerShape(28.dp)
-    Column(
+    DensityResetGlassPanel(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = 560.dp)
-            .padding(20.dp)
-            .background(appearancePanelColor(appearanceMode), shape)
-            .border(1.dp, appearanceBorderColor(appearanceMode), shape)
-            .padding(22.dp),
+            .padding(20.dp),
+        cornerRadius = 28.dp,
+        contentPadding = PaddingValues(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content

@@ -5,7 +5,8 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_dialog_glass"
     android:orientation="vertical"
-    android:padding="22dp">
+    android:padding="22dp"
+    android:tag="appearance_glass_panel">
 
     <TextView
         android:layout_width="match_parent"

@@ -1,8 +1,8 @@
 package com.zaid.densityreset.license.ui
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Application
+import android.app.Dialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -17,6 +17,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.snackbar.Snackbar
 import com.zaid.densityreset.MainActivity
 import com.zaid.densityreset.R
+import com.zaid.densityreset.appearance.AppAppearancePreferences
+import com.zaid.densityreset.appearance.AppAppearanceViewController
+import com.zaid.densityreset.databinding.DialogLicenseLogoutBinding
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.domain.LicenseState
 import kotlinx.coroutines.launch
@@ -66,6 +69,13 @@ object LicenseUiBinder {
             .inflate(R.layout.view_license_panel, container, false)
         val index = container.indexOfChild(testCard)
         container.addView(panel, index.coerceAtLeast(0))
+        activity.findViewById<View>(R.id.backgroundImage)?.let { backdrop ->
+            AppAppearanceViewController.applyTaggedSurfaces(
+                root = panel,
+                backdropSource = backdrop,
+                mode = AppAppearancePreferences.get(activity)
+            )
+        }
 
         val status = panel.findViewById<TextView>(R.id.licensePanelStatus)
         val expires = panel.findViewById<TextView>(R.id.licensePanelExpires)
@@ -91,17 +101,29 @@ object LicenseUiBinder {
         }
 
         logout.setOnClickListener {
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.license_logout_title)
-                .setMessage(R.string.license_logout_confirmation)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.license_logout_button) { _, _ ->
-                    activity.lifecycleScope.launch {
-                        LicenseManager.logout()
-                        redirectToGate(activity)
-                    }
+            val dialog = Dialog(activity)
+            val dialogBinding = DialogLicenseLogoutBinding.inflate(activity.layoutInflater)
+            dialog.setContentView(dialogBinding.root)
+            dialog.setCancelable(true)
+            dialogBinding.buttonCancelLicenseLogout.setOnClickListener { dialog.dismiss() }
+            dialogBinding.buttonConfirmLicenseLogout.setOnClickListener {
+                dialog.dismiss()
+                activity.lifecycleScope.launch {
+                    LicenseManager.logout()
+                    redirectToGate(activity)
                 }
-                .show()
+            }
+            dialog.show()
+            AppAppearanceViewController.applyDialogSurface(
+                dialog = dialog,
+                surface = dialogBinding.root,
+                backdropSource = activity.findViewById(android.R.id.content),
+                mode = AppAppearancePreferences.get(activity)
+            )
+            dialog.window?.setLayout(
+                (activity.resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
         activity.lifecycleScope.launch {
