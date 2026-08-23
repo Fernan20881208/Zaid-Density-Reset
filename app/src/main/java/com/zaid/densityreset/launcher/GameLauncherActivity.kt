@@ -12,6 +12,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,7 +33,7 @@ import kotlinx.coroutines.launch
 class GameLauncherActivity : ComponentActivity() {
 
     private val viewModel: GameLauncherViewModel by viewModels()
-    private lateinit var appearanceMode: AppAppearanceMode
+    private var appearanceMode by mutableStateOf(AppAppearanceMode.LIQUID_GLASS)
     private var pendingGame: SupportedGame? = null
 
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -134,7 +137,8 @@ class GameLauncherActivity : ComponentActivity() {
     private fun changeAppearanceMode(mode: AppAppearanceMode) {
         if (mode == appearanceMode) return
         AppAppearancePreferences.set(this, mode)
-        recreate()
+        appearanceMode = mode
+        AppAppearanceViewController.applyWindow(this, mode)
     }
 
     private fun requestNotificationThenPlay(game: SupportedGame) {

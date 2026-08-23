@@ -1,6 +1,8 @@
 package com.zaid.densityreset.booster
 
+import com.zaid.densityreset.appearance.AppAppearanceMode
 import com.zaid.densityreset.remoteconfig.RemoteAppConfig
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -239,6 +241,20 @@ class GameBoosterCoreTest {
         assertEquals(100, normalizeOverlayOpacity(140))
         assertEquals(85, GameOverlayPreference().normalizedOpacityPercent)
         assertTrue(GameOverlayPreference().enabled)
+    }
+
+    @Test
+    fun overlayPaletteTracksTheSelectedAppearance() {
+        val glass = gameStatsOverlayPalette(AppAppearanceMode.LIQUID_GLASS)
+        val amoled = gameStatsOverlayPalette(AppAppearanceMode.AMOLED)
+
+        assertArrayEquals(
+            intArrayOf(0xFF000000.toInt(), 0xFF000000.toInt()),
+            amoled.backgroundColors
+        )
+        assertEquals(0xFF2A2A2A.toInt(), amoled.borderColor)
+        assertEquals(0xFF9DEAF4.toInt(), glass.accentColor)
+        assertFalse(glass.backgroundColors.contentEquals(amoled.backgroundColors))
     }
 
     @Test

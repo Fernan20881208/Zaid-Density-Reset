@@ -23,10 +23,15 @@ La opción se guarda en preferencias y se aplica al arranque, licencia, actualiz
 y controles clásicos:
 
 - **Liquid Glass**: opción predeterminada; usa el motor QWEA0 en los paneles de toda la interfaz,
+  incluidos los grupos internos de sensibilidad, Game Booster, métricas y selector de apariencia,
   con fondo detallado, refracción dinámica, dispersión moderada, brillo por sensor limitado al
   encabezado y fallback automático de accesibilidad.
 - **AMOLED**: fondo `#000000`, barras del sistema negras y paneles opacos oscuros para conservar
-  píxeles negros en pantallas OLED.
+  píxeles negros en pantallas OLED. Los controles seleccionados y el HUD de juego también evitan
+  fondos azules simulados.
+
+El Game Launcher cambia entre ambos modos inmediatamente, sin recrear la actividad, y mantiene la
+selección para el siguiente inicio.
 
 La dependencia de Liquid Glass está fijada a `v2.0.2`. Consulta
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) para la atribución.

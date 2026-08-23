@@ -9,6 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,8 +37,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -70,10 +73,14 @@ import com.zaid.densityreset.booster.ThermalInfo
 import com.zaid.densityreset.booster.ThermalLevel
 import com.zaid.densityreset.appearance.AppAppearanceMode
 import com.zaid.densityreset.appearance.DensityResetGlassPanel
+import com.zaid.densityreset.appearance.DensityResetGlassSubcard
 import com.zaid.densityreset.appearance.LocalAppAppearanceMode
 import com.zaid.densityreset.appearance.appearanceBackground
-import com.zaid.densityreset.appearance.appearanceBorderColor
-import com.zaid.densityreset.appearance.appearanceSubcardColor
+import com.zaid.densityreset.appearance.appearanceDisabledButtonColor
+import com.zaid.densityreset.appearance.appearanceIconBackgroundColor
+import com.zaid.densityreset.appearance.appearanceInteractiveBorderColor
+import com.zaid.densityreset.appearance.appearanceInteractiveSurfaceColor
+import com.zaid.densityreset.appearance.appearanceSecondaryButtonColor
 import com.zaid.densityreset.density.DensityPreset
 import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.icons.AppIconRepositoryProvider
@@ -117,7 +124,8 @@ fun GameLauncherScreen(
                         end = 16.dp,
                         top = 20.dp,
                         bottom = 0.dp
-                    )
+                    ),
+                    sensorHighlight = true
                 ) {
                     Text("Density Reset", color = Color(0xFFE8EDF5))
                     Text(
@@ -207,18 +215,10 @@ fun GameLauncherScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     contentPadding = PaddingValues(6.dp)
                 ) {
-                    Button(
-                        onClick = onOpenLegacyControls,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0x5C375374),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text("CONTROLES Y AJUSTES")
-                    }
+                    SecondaryButton(
+                        text = "CONTROLES Y AJUSTES",
+                        onClick = onOpenLegacyControls
+                    )
                 }
             }
             item { Spacer(Modifier.heightIn(min = 24.dp)) }
@@ -362,11 +362,10 @@ private fun MetricDetail(
     thermal: ThermalInfo?,
     fps: Float?
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0x55243D59), RoundedCornerShape(18.dp))
-            .padding(14.dp),
+    DensityResetGlassSubcard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+        contentPadding = PaddingValues(14.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         when (metric) {
@@ -458,16 +457,10 @@ private fun DeviceDiagnosticsCard(
             }
         }
 
-        Button(
-            onClick = onRedetectDevice,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0x5C375374),
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("VOLVER A DETECTAR DISPOSITIVO")
-        }
+        SecondaryButton(
+            text = "VOLVER A DETECTAR DISPOSITIVO",
+            onClick = onRedetectDevice
+        )
     }
 }
 
@@ -495,7 +488,6 @@ private fun GameCard(
     onPlay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val appearanceMode = LocalAppAppearanceMode.current
     var expanded by remember(state.game) { mutableStateOf(false) }
     var overlayOpacityDraft by remember(state.game, state.overlayOpacityPercent) {
         mutableStateOf(state.overlayOpacityPercent.toFloat())
@@ -615,49 +607,45 @@ private fun GameCard(
                 exit = fadeOut(tween(120))
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Sensibilidad", color = Color.White, fontWeight = FontWeight.Bold)
-                    DensityPreset.visualOrder.forEach { preset ->
-                        ProfileRow(
-                            preset = preset,
-                            selected = state.selectedProfile == preset,
-                            enabled = isPresetEnabled(preset) && !busy,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelectProfile(preset)
-                            }
+                    DensityResetGlassSubcard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 20.dp,
+                        contentPadding = PaddingValues(10.dp)
+                    ) {
+                        Text("Sensibilidad", color = Color.White, fontWeight = FontWeight.Bold)
+                        DensityPreset.visualOrder.forEach { preset ->
+                            ProfileRow(
+                                preset = preset,
+                                selected = state.selectedProfile == preset,
+                                enabled = isPresetEnabled(preset) && !busy,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSelectProfile(preset)
+                                }
+                            )
+                        }
+                        Text(
+                            if (state.defaultProfile == state.selectedProfile) {
+                                "★ Quitar como perfil predeterminado"
+                            } else {
+                                "☆ Usar como perfil predeterminado"
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !busy && isPresetEnabled(state.selectedProfile)) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onToggleDefault()
+                                }
+                                .padding(vertical = 8.dp),
+                            color = Color(0xFF9DEAF4),
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
-                    Text(
-                        if (state.defaultProfile == state.selectedProfile) {
-                            "★ Quitar como perfil predeterminado"
-                        } else {
-                            "☆ Usar como perfil predeterminado"
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !busy && isPresetEnabled(state.selectedProfile)) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onToggleDefault()
-                            }
-                            .padding(vertical = 8.dp),
-                        color = Color(0xFF9DEAF4),
-                        fontWeight = FontWeight.SemiBold
-                    )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                appearanceSubcardColor(appearanceMode),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .border(
-                                1.dp,
-                                appearanceBorderColor(appearanceMode),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    DensityResetGlassSubcard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 20.dp,
+                        contentPadding = PaddingValues(14.dp)
                     ) {
                         Text("Game Booster", color = Color.White, fontWeight = FontWeight.Bold)
                         if (!boosterEnabled) {
@@ -706,7 +694,13 @@ private fun GameCard(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSetOverlayEnabled(enabled)
                                 },
-                                enabled = !busy
+                                enabled = !busy,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             )
                         }
 
@@ -723,7 +717,13 @@ private fun GameCard(
                                     onSetOverlayOpacity(overlayOpacityDraft.roundToInt())
                                 },
                                 valueRange = 20f..100f,
-                                enabled = !busy
+                                enabled = !busy,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledThumbColor = MaterialTheme.colorScheme.outline
+                                )
                             )
                             Text(
                                 "20% es muy transparente; 100% es completamente visible.",
@@ -761,11 +761,8 @@ private fun BoosterModeRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                if (selected) Color(0x84345B7B)
-                else appearanceSubcardColor(appearanceMode)
-            )
-            .border(1.dp, if (selected) Color(0xD09DEAF4) else Color(0x50FFFFFF), shape)
+            .background(appearanceInteractiveSurfaceColor(appearanceMode, selected))
+            .border(1.dp, appearanceInteractiveBorderColor(appearanceMode, selected), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.Top,
@@ -808,11 +805,8 @@ private fun ProfileRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                if (selected) Color(0x84345B7B)
-                else appearanceSubcardColor(appearanceMode)
-            )
-            .border(1.dp, if (selected) Color(0xD09DEAF4) else Color(0x70FFFFFF), shape)
+            .background(appearanceInteractiveSurfaceColor(appearanceMode, selected))
+            .border(1.dp, appearanceInteractiveBorderColor(appearanceMode, selected), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -864,6 +858,7 @@ private fun GameIcon(
     fallback: String
 ) {
     val context = LocalContext.current
+    val appearanceMode = LocalAppAppearanceMode.current
     val configuration = LocalConfiguration.current
     val densityDpi = configuration.densityDpi
     val uiMode = configuration.uiMode
@@ -895,7 +890,7 @@ private fun GameIcon(
             .aspectRatio(1f)
             .scale(scale)
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0x68213A57)),
+            .background(appearanceIconBackgroundColor(appearanceMode)),
         contentAlignment = Alignment.Center
     ) {
         Crossfade(targetState = loaded, label = "game-icon-reload") { success ->
@@ -956,6 +951,7 @@ private fun formatGiB(bytes: Long): String =
 
 @Composable
 private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    val appearanceMode = LocalAppAppearanceMode.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -972,9 +968,9 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
             .heightIn(min = 50.dp)
             .scale(scale),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFFAFC8FF),
-            contentColor = Color(0xFF071126),
-            disabledContainerColor = Color(0x49375374),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = appearanceDisabledButtonColor(appearanceMode),
             disabledContentColor = Color(0x99FFFFFF)
         )
     ) {
@@ -983,9 +979,38 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun SecondaryButton(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val appearanceMode = LocalAppAppearanceMode.current
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = appearanceSecondaryButtonColor(appearanceMode),
+            contentColor = Color.White,
+            disabledContainerColor = appearanceDisabledButtonColor(appearanceMode),
+            disabledContentColor = Color(0x99FFFFFF)
+        ),
+        border = BorderStroke(
+            1.dp,
+            appearanceInteractiveBorderColor(appearanceMode, selected = false)
+        )
+    ) {
+        Text(text, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
 private fun GlassPanel(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(18.dp),
+    sensorHighlight: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     DensityResetGlassPanel(
@@ -994,6 +1019,7 @@ private fun GlassPanel(
         cornerRadius = 24.dp,
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
+        sensorHighlight = sensorHighlight,
         content = content
     )
 }
@@ -1003,48 +1029,49 @@ private fun AppearanceModeSelector(
     selectedMode: AppAppearanceMode,
     onModeSelected: (AppAppearanceMode) -> Unit
 ) {
-    Row(
+    DensityResetGlassSubcard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        cornerRadius = 20.dp,
+        contentPadding = PaddingValues(7.dp)
     ) {
-        AppAppearanceMode.entries.forEach { mode ->
-            val selected = mode == selectedMode
-            val shape = RoundedCornerShape(16.dp)
-            val label = when (mode) {
-                AppAppearanceMode.LIQUID_GLASS -> "Liquid Glass"
-                AppAppearanceMode.AMOLED -> "AMOLED"
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(shape)
-                    .background(
-                        if (selected) Color(0x66345B7B)
-                        else appearanceSubcardColor(selectedMode),
-                        shape
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AppAppearanceMode.entries.forEach { mode ->
+                val selected = mode == selectedMode
+                val shape = RoundedCornerShape(16.dp)
+                val label = when (mode) {
+                    AppAppearanceMode.LIQUID_GLASS -> "Liquid Glass"
+                    AppAppearanceMode.AMOLED -> "AMOLED"
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(shape)
+                        .background(appearanceInteractiveSurfaceColor(selectedMode, selected), shape)
+                        .border(
+                            1.dp,
+                            appearanceInteractiveBorderColor(selectedMode, selected),
+                            shape
+                        )
+                        .selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = { onModeSelected(mode) }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (selected) "● $label" else "○ $label",
+                        color = if (selected) Color(0xFF9DEAF4) else Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    .border(
-                        1.dp,
-                        if (selected) Color(0xFF9DEAF4)
-                        else appearanceBorderColor(selectedMode),
-                        shape
-                    )
-                    .selectable(
-                        selected = selected,
-                        role = Role.RadioButton,
-                        onClick = { onModeSelected(mode) }
-                    )
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (selected) "● $label" else "○ $label",
-                    color = if (selected) Color(0xFF9DEAF4) else Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
+                }
             }
         }
     }
