@@ -64,8 +64,8 @@ jobs:
       - name: Dar permiso al Gradle Wrapper
         run: chmod +x gradlew
 
-      - name: Ejecutar lint, pruebas y compilación debug
-        run: ./gradlew clean lintDebug testDebugUnitTest assembleDebug
+      - name: Ejecutar lint, pruebas y compilaciones debug/release
+        run: ./gradlew clean lintDebug testDebugUnitTest assembleDebug assembleRelease
 
       - name: Leer versión
         id: version

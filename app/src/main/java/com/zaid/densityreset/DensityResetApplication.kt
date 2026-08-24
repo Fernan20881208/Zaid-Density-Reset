@@ -5,6 +5,7 @@ import com.zaid.densityreset.icons.AppIconRepositoryProvider
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.ui.LicenseUiBinder
 import com.zaid.densityreset.quicktile.DensityTileStateObserver
+import com.zaid.densityreset.quicklaunch.GameShortcutPublisher
 import com.zaid.densityreset.remoteconfig.RemoteConfigManager
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.startup.StartupActivityGuard
@@ -22,6 +23,7 @@ class DensityResetApplication : Application() {
         StartupCoordinator.initialize(this)
         StartupActivityGuard.register(this)
         DensityTileStateObserver.initialize(this)
+        GameShortcutPublisher.publish(this)
         LicenseUiBinder.register(this)
     }
 }

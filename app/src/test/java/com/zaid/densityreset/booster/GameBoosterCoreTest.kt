@@ -1,6 +1,8 @@
 package com.zaid.densityreset.booster
 
+import com.zaid.densityreset.appearance.AppAppearanceMode
 import com.zaid.densityreset.remoteconfig.RemoteAppConfig
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -11,15 +13,44 @@ import kotlin.math.abs
 class GameBoosterCoreTest {
 
     @Test
-    fun exposesExactlyFourBoosterModes() {
+    fun keepsExistingModesAndAddsBalancedAndUltraBattery() {
         assertEquals(
             listOf(
                 BoosterMode.GAME,
+                BoosterMode.BALANCED,
                 BoosterMode.BATTERY,
+                BoosterMode.ULTRA_BATTERY,
                 BoosterMode.MAX_PERFORMANCE,
                 BoosterMode.ULTRA_MAX_PERFORMANCE
             ),
             BoosterMode.entries
+        )
+    }
+
+    @Test
+    fun thermalProtectionDowngradesPerformanceModes() {
+        assertEquals(
+            BoosterMode.BALANCED,
+            thermalFallbackMode(
+                BoosterMode.MAX_PERFORMANCE,
+                ThermalLevel.HOT,
+                batteryModeAvailable = true
+            )
+        )
+        assertEquals(
+            BoosterMode.ULTRA_BATTERY,
+            thermalFallbackMode(
+                BoosterMode.ULTRA_MAX_PERFORMANCE,
+                ThermalLevel.VERY_HOT,
+                batteryModeAvailable = true
+            )
+        )
+        assertNull(
+            thermalFallbackMode(
+                BoosterMode.ULTRA_BATTERY,
+                ThermalLevel.VERY_HOT,
+                batteryModeAvailable = true
+            )
         )
     }
 
@@ -239,6 +270,20 @@ class GameBoosterCoreTest {
         assertEquals(100, normalizeOverlayOpacity(140))
         assertEquals(85, GameOverlayPreference().normalizedOpacityPercent)
         assertTrue(GameOverlayPreference().enabled)
+    }
+
+    @Test
+    fun overlayPaletteTracksTheSelectedAppearance() {
+        val glass = gameStatsOverlayPalette(AppAppearanceMode.LIQUID_GLASS)
+        val amoled = gameStatsOverlayPalette(AppAppearanceMode.AMOLED)
+
+        assertArrayEquals(
+            intArrayOf(0xFF000000.toInt(), 0xFF000000.toInt()),
+            amoled.backgroundColors
+        )
+        assertEquals(0xFF2A2A2A.toInt(), amoled.borderColor)
+        assertEquals(0xFF9DEAF4.toInt(), glass.accentColor)
+        assertFalse(glass.backgroundColors.contentEquals(amoled.backgroundColors))
     }
 
     @Test

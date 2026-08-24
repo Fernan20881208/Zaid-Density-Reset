@@ -3,6 +3,12 @@ package com.zaid.densityreset.launcher
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zaid.densityreset.analytics.GamePlaytimeRepositoryImpl
+import com.zaid.densityreset.analytics.GamePlaytimeSummary
+import com.zaid.densityreset.automation.GameAutomationPreference
+import com.zaid.densityreset.automation.GameAutomationRepositoryImpl
+import com.zaid.densityreset.automation.GameSystemAccessInspector
+import com.zaid.densityreset.automation.GameSystemAccessState
 import com.zaid.densityreset.booster.BoosterMode
 import com.zaid.densityreset.booster.GameBoosterManager
 import com.zaid.densityreset.booster.GameBoosterState
@@ -17,6 +23,7 @@ import com.zaid.densityreset.gameprofile.domain.SupportedGame
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
 import com.zaid.densityreset.remoteconfig.RemoteAppConfig
 import com.zaid.densityreset.remoteconfig.RemoteConfigManager
+import com.zaid.densityreset.recording.ScreenCaptureGrant
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.startup.StartupCoordinator
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -25,6 +32,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class GameLauncherGameUiState(
@@ -41,6 +49,8 @@ data class GameLauncherGameUiState(
     val boosterMode: BoosterMode,
     val overlayEnabled: Boolean,
     val overlayOpacityPercent: Int,
+    val automation: GameAutomationPreference,
+    val playtime: GamePlaytimeSummary,
     val canPlay: Boolean
 )
 
@@ -52,7 +62,8 @@ data class GameLauncherUiState(
     val announcementTitle: String? = null,
     val announcementMessage: String? = null,
     val busy: Boolean = false,
-    val boosterEnabled: Boolean = true
+    val boosterEnabled: Boolean = true,
+    val systemAccess: GameSystemAccessState? = null
 )
 
 class GameLauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -67,10 +78,14 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
     )
     private val diagnosticBoosterManager = GameBoosterManager(application)
     private val overlayPreferencesStore = GameOverlayPreferencesStore(application)
+    private val automationRepository = GameAutomationRepositoryImpl(application)
+    private val playtimeRepository = GamePlaytimeRepositoryImpl(application)
 
     private val installed = mutableMapOf<SupportedGame, InstalledGameInfo>()
     private var preferences: Map<SupportedGame, GameLauncherPreference> = emptyMap()
     private val overlayPreferences = mutableMapOf<SupportedGame, GameOverlayPreference>()
+    private var automationPreferences: Map<SupportedGame, GameAutomationPreference> = emptyMap()
+    private var playtime: Map<SupportedGame, GamePlaytimeSummary> = emptyMap()
     private var config: RemoteAppConfig = RemoteConfigManager.currentConfig()
     private var session = GameSessionState()
     private var booster = GameBoosterState()
@@ -106,6 +121,18 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
             }
         }
 
+        viewModelScope.launch {
+            automationRepository.observe().collect { value ->
+                automationPreferences = value
+                rebuild()
+            }
+        }
+        viewModelScope.launch {
+            playtimeRepository.observe().collect { value ->
+                playtime = value
+                rebuild()
+            }
+        }
         viewModelScope.launch {
             repository.observePreferences().collect { value ->
                 preferences = value
@@ -186,6 +213,74 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun setPriorityDndEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setPriorityDndEnabled(game, enabled) }
+    }
+
+    fun setBrightnessEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setBrightnessEnabled(game, enabled) }
+    }
+
+    fun setBrightnessPercent(game: SupportedGame, percent: Int) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setBrightnessPercent(game, percent) }
+    }
+
+    fun setRotationLockEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setRotationLockEnabled(game, enabled) }
+    }
+
+    fun setMediaVolumeEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setMediaVolumeEnabled(game, enabled) }
+    }
+
+    fun setMediaVolumePercent(game: SupportedGame, percent: Int) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setMediaVolumePercent(game, percent) }
+    }
+
+    fun setScreenRecordingEnabled(game: SupportedGame, enabled: Boolean) {
+        if (session.sessionActive || startRequested) return
+        viewModelScope.launch { automationRepository.setScreenRecordingEnabled(game, enabled) }
+    }
+
+    fun automationPreference(game: SupportedGame): GameAutomationPreference =
+        automationPreferences[game] ?: GameAutomationPreference()
+
+    suspend fun loadAutomationPreference(game: SupportedGame): GameAutomationPreference =
+        automationRepository.read(game)
+
+    suspend fun prepareLaunch(game: SupportedGame) {
+        val latest = repository.observePreferences().first()
+        preferences = latest
+        val preference = latest[game]
+        selected[game] = preference?.defaultProfile?.takeIf(::isPresetEnabled)
+            ?: preference?.lastProfile?.takeIf(::isPresetEnabled)
+            ?: firstEnabledPreset()
+        rebuild()
+    }
+
+    fun launchBlockReason(game: SupportedGame): String? {
+        val info = installed[game] ?: repository.installedGame(game)
+        val shizuku = ShizukuManager.currentState()
+        val profile = selectedProfile(game)
+        return when {
+            !StartupCoordinator.isReady() -> "La aplicación todavía está validando el acceso."
+            !info.installed -> "${game.displayName} no está instalado."
+            !isGameEnabled(game) -> "${game.displayName} está temporalmente no disponible."
+            session.sessionActive || startRequested -> "Ya existe una sesión de juego activa."
+            !isPresetEnabled(profile) -> "${profile.displayName} está temporalmente no disponible."
+            !shizuku.installed -> "Shizuku no está instalado."
+            !shizuku.running -> "Shizuku no está ejecutándose."
+            !shizuku.permissionGranted -> "Permiso de Shizuku denegado."
+            else -> null
+        }
+    }
+
     fun toggleDefaultProfile(game: SupportedGame) {
         if (session.sessionActive || startRequested) return
         val preset = selectedProfile(game)
@@ -196,7 +291,7 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun play(game: SupportedGame) {
+    fun play(game: SupportedGame, screenCaptureGrant: ScreenCaptureGrant? = null) {
         if (!StartupCoordinator.isReady()) {
             _events.tryEmit("La aplicación todavía está validando el acceso.")
             return
@@ -230,7 +325,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
                 val result = sessionController.startSession(
                     game = game,
                     preset = preset,
-                    boosterMode = modeToApply
+                    boosterMode = modeToApply,
+                    screenCaptureGrant = screenCaptureGrant
                 )
             ) {
                 is GameSessionResult.Success -> _events.emit(result.message)
@@ -328,6 +424,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
             }
             val preference = preferences[game] ?: GameLauncherPreference()
             val overlayPreference = overlayPreferences[game] ?: GameOverlayPreference()
+            val automation = automationPreferences[game] ?: GameAutomationPreference()
+            val gamePlaytime = playtime[game] ?: GamePlaytimeSummary(game)
             val profile = selectedProfile(game)
             GameLauncherGameUiState(
                 game = game,
@@ -343,6 +441,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
                 boosterMode = preference.boosterMode,
                 overlayEnabled = overlayPreference.enabled,
                 overlayOpacityPercent = overlayPreference.normalizedOpacityPercent,
+                automation = automation,
+                playtime = gamePlaytime,
                 canPlay = info.installed &&
                     isGameEnabled(game) &&
                     isPresetEnabled(profile) &&
@@ -360,7 +460,8 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
             announcementTitle = config.announcementTitle,
             announcementMessage = config.announcementMessage,
             busy = busy,
-            boosterEnabled = config.gameBoosterEnabled
+            boosterEnabled = config.gameBoosterEnabled,
+            systemAccess = GameSystemAccessInspector.inspect(getApplication())
         )
     }
 
@@ -379,8 +480,10 @@ class GameLauncherViewModel(application: Application) : AndroidViewModel(applica
 
     fun isBoosterModeEnabled(mode: BoosterMode): Boolean =
         config.gameBoosterEnabled && when (mode) {
-            BoosterMode.GAME -> config.gameModeEnabled
-            BoosterMode.BATTERY -> config.batteryModeEnabled
+            BoosterMode.GAME,
+            BoosterMode.BALANCED -> config.gameModeEnabled
+            BoosterMode.BATTERY,
+            BoosterMode.ULTRA_BATTERY -> config.batteryModeEnabled
             BoosterMode.MAX_PERFORMANCE,
             BoosterMode.ULTRA_MAX_PERFORMANCE -> config.maxPerformanceEnabled
         }

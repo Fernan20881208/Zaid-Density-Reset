@@ -9,6 +9,7 @@
     android:clipToOutline="true"
     android:orientation="vertical"
     android:padding="24dp"
+    android:tag="appearance_glass_panel"
     android:visibility="gone">
 
     <TextView

@@ -6,6 +6,10 @@
     <string name="section_shizuku">Estado de Shizuku</string>
     <string name="section_accessibility">Atajo de accesibilidad</string>
     <string name="section_settings">Preferencias</string>
+    <string name="appearance_title">Apariencia</string>
+    <string name="appearance_liquid_glass">Liquid Glass</string>
+    <string name="appearance_amoled">AMOLED</string>
+    <string name="appearance_summary">Liquid Glass usa refracción y desenfoque dinámicos. AMOLED utiliza negro puro para pantallas OLED.</string>
     <string name="section_multi_dpi">DPI múltiple</string>
     <string name="section_game_profiles">Perfiles por juego</string>
     <string name="section_test">Prueba rápida</string>
@@ -121,6 +125,10 @@
     <string name="game_session_restore_failed">No fue posible restaurar el DPI. Inicia Shizuku y pulsa “Restaurar ahora”.</string>
     <string name="game_session_channel_name">Sesiones de DPI por juego</string>
     <string name="game_session_channel_description">Mantiene y restaura el DPI temporal durante una sesión de juego.</string>
+    <string name="quick_tile_ff">FF</string>
+    <string name="quick_tile_ffm">FFM</string>
+    <string name="notification_stop_recording">STOP</string>
+    <string name="notification_restore_short">REST.</string>
     <string name="notification_permission_required">Permite las notificaciones para iniciar una sesión y conservar el botón de restauración.</string>
     <string name="session_active_seconds">Sesión activa · %1$d s</string>
     <string name="session_game_profile_format">%1$s · %2$s · %3$d DPI</string>

@@ -1,7 +1,6 @@
 package com.zaid.densityreset.booster
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -10,6 +9,8 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.AppAppearancePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,7 +44,9 @@ class GameStatsOverlayController(context: Context) {
     fun start(opacityPercent: Int = DEFAULT_OVERLAY_OPACITY_PERCENT): Boolean {
         if (!canDraw()) return false
         val normalizedOpacity = normalizeOverlayOpacity(opacityPercent)
-        if (root == null && !attachWindow(normalizedOpacity)) return false
+        val palette = gameStatsOverlayPalette(AppAppearancePreferences.get(appContext))
+        if (root == null && !attachWindow(normalizedOpacity, palette)) return false
+        root?.let { applyPalette(it, palette) }
         root?.alpha = normalizedOpacity / 100f
 
         collectorJob?.cancel()
@@ -74,21 +77,19 @@ class GameStatsOverlayController(context: Context) {
         scope.cancel()
     }
 
-    private fun attachWindow(opacityPercent: Int): Boolean = runCatching {
+    private fun attachWindow(
+        opacityPercent: Int,
+        palette: GameStatsOverlayPalette
+    ): Boolean = runCatching {
         val container = LinearLayout(appContext).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(9), dp(12), dp(9))
             alpha = normalizeOverlayOpacity(opacityPercent) / 100f
-            background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(Color.rgb(15, 24, 37))
-                setStroke(dp(1), Color.argb(180, 157, 234, 244))
-            }
         }
 
         fun line(sizeSp: Float = 11f, bold: Boolean = false): TextView =
             TextView(appContext).apply {
-                setTextColor(Color.WHITE)
+                setTextColor(palette.textColor)
                 textSize = sizeSp
                 includeFontPadding = false
                 if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -99,6 +100,7 @@ class GameStatsOverlayController(context: Context) {
         ramText = line()
         batteryText = line()
         thermalText = line()
+        applyPalette(container, palette)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -118,6 +120,23 @@ class GameStatsOverlayController(context: Context) {
         root = container
         true
     }.getOrDefault(false)
+
+    private fun applyPalette(
+        container: LinearLayout,
+        palette: GameStatsOverlayPalette
+    ) {
+        container.background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            palette.backgroundColors.copyOf()
+        ).apply {
+            cornerRadius = dp(14).toFloat()
+            setStroke(dp(1), palette.borderColor)
+        }
+        modeText?.setTextColor(palette.accentColor)
+        listOf(fpsText, ramText, batteryText, thermalText).forEach { text ->
+            text?.setTextColor(palette.textColor)
+        }
+    }
 
     private fun render(state: GameBoosterState) {
         modeText?.text = "ZAID · ${state.mode?.displayName ?: "Game Booster"}"
@@ -171,3 +190,26 @@ class GameStatsOverlayController(context: Context) {
         const val GIB = 1024.0 * 1024.0 * 1024.0
     }
 }
+
+internal data class GameStatsOverlayPalette(
+    val backgroundColors: IntArray,
+    val borderColor: Int,
+    val textColor: Int,
+    val accentColor: Int
+)
+
+internal fun gameStatsOverlayPalette(mode: AppAppearanceMode): GameStatsOverlayPalette =
+    when (mode) {
+        AppAppearanceMode.LIQUID_GLASS -> GameStatsOverlayPalette(
+            backgroundColors = intArrayOf(0xED15253B.toInt(), 0xED08111E.toInt()),
+            borderColor = 0xB49DEAF4.toInt(),
+            textColor = 0xFFFFFFFF.toInt(),
+            accentColor = 0xFF9DEAF4.toInt()
+        )
+        AppAppearanceMode.AMOLED -> GameStatsOverlayPalette(
+            backgroundColors = intArrayOf(0xFF000000.toInt(), 0xFF000000.toInt()),
+            borderColor = 0xFF2A2A2A.toInt(),
+            textColor = 0xFFFFFFFF.toInt(),
+            accentColor = 0xFF9DEAF4.toInt()
+        )
+    }

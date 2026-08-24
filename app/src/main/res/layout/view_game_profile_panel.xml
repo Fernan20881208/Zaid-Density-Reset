@@ -8,7 +8,8 @@
     android:animateLayoutChanges="true"
     android:background="@drawable/bg_glass_panel"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="24dp"
+    android:tag="appearance_glass_panel">
 
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" android:text="@string/section_game_profiles" android:textColor="@color/glass_text_primary" android:textSize="20sp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/game_profiles_summary" android:textColor="@color/glass_text_secondary" android:textSize="13sp" />
@@ -68,7 +69,7 @@
         <ProgressBar android:id="@+id/gameSessionStartProgress" android:layout_width="26dp" android:layout_height="26dp" android:layout_gravity="center_vertical|end" android:layout_marginEnd="18dp" android:indeterminateTint="@color/glass_button_text" android:visibility="gone" />
     </FrameLayout>
 
-    <LinearLayout android:id="@+id/sessionProgressCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:background="@drawable/bg_glass_subcard" android:orientation="vertical" android:padding="20dp" android:visibility="gone">
+    <LinearLayout android:id="@+id/sessionProgressCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:background="@drawable/bg_glass_subcard" android:orientation="vertical" android:padding="20dp" android:tag="appearance_glass_subcard" android:visibility="gone">
         <TextView android:id="@+id/sessionProgressTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" android:text="@string/game_session_preparing" android:textColor="@color/glass_text_primary" android:textSize="17sp" />
         <TextView android:id="@+id/sessionProgressSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/glass_text_secondary" android:textSize="13sp" />
         <LinearLayout android:id="@+id/sessionCountdownContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:gravity="center" android:orientation="horizontal" android:visibility="gone">

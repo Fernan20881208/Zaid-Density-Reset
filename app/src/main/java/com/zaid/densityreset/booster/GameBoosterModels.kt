@@ -12,10 +12,20 @@ enum class BoosterMode(
         shortDescription = "Equilibrado",
         userDescription = "Buen rendimiento sin aumentar demasiado el consumo."
     ),
+    BALANCED(
+        displayName = "Equilibrado",
+        shortDescription = "Rendimiento estable",
+        userDescription = "Usa el modo estándar de Android y permite bajar el nivel automáticamente si el teléfono se calienta."
+    ),
     BATTERY(
         displayName = "Ahorro de batería",
         shortDescription = "Mayor autonomía",
         userDescription = "Reduce el consumo para poder jugar durante más tiempo."
+    ),
+    ULTRA_BATTERY(
+        displayName = "Ultra ahorro de batería",
+        shortDescription = "Consumo mínimo",
+        userDescription = "Usa el modo Battery de Android y evita el muestreo FPS más costoso para alargar la sesión."
     ),
     MAX_PERFORMANCE(
         displayName = "Máximo rendimiento",
@@ -89,7 +99,9 @@ data class BoosterCapabilities(
     val fpsMonitoringAvailable: Boolean = false,
     val thermalMonitoringAvailable: Boolean = false,
     val memoryMonitoringAvailable: Boolean = false,
-    val vendorGameServiceAvailable: Boolean = false
+    val vendorGameServiceAvailable: Boolean = false,
+    val currentGameMode: String? = null,
+    val availableGameModes: Set<String> = emptySet()
 )
 
 data class BoosterSnapshot(
@@ -185,8 +197,35 @@ data class GameBoosterState(
     val capabilities: BoosterCapabilities = BoosterCapabilities(),
     val actionsApplied: List<BoosterAction> = emptyList(),
     val monitor: GamePerformanceState = GamePerformanceState(),
-    val message: String? = null
+    val message: String? = null,
+    val thermalAdaptationMessage: String? = null
 )
+
+internal fun thermalFallbackMode(
+    current: BoosterMode?,
+    thermalLevel: ThermalLevel,
+    batteryModeAvailable: Boolean
+): BoosterMode? {
+    if (current == null) return null
+    return when (thermalLevel) {
+        ThermalLevel.VERY_HOT -> when (current) {
+            BoosterMode.ULTRA_BATTERY -> null
+            else -> if (batteryModeAvailable) {
+                BoosterMode.ULTRA_BATTERY
+            } else if (current != BoosterMode.BALANCED && current != BoosterMode.GAME) {
+                BoosterMode.BALANCED
+            } else {
+                null
+            }
+        }
+        ThermalLevel.HOT -> when (current) {
+            BoosterMode.MAX_PERFORMANCE,
+            BoosterMode.ULTRA_MAX_PERFORMANCE -> BoosterMode.BALANCED
+            else -> null
+        }
+        else -> null
+    }
+}
 
 sealed interface BoosterResult {
     data class Success(

@@ -8,10 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,11 +30,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zaid.densityreset.BuildConfig
+import com.zaid.densityreset.appearance.DensityResetGlassPanel
+import com.zaid.densityreset.appearance.LocalAppAppearanceMode
+import com.zaid.densityreset.appearance.appearanceBackground
 import kotlin.math.max
 
 @Composable
@@ -48,9 +49,8 @@ fun UpdateScreen(
     BackHandler(enabled = true) { }
 
     val release = state.release ?: return
-    val background = Brush.verticalGradient(
-        listOf(Color(0xFF07101F), Color(0xFF172B47), Color(0xFF080D17))
-    )
+    val appearanceMode = LocalAppAppearanceMode.current
+    val background = appearanceBackground(appearanceMode)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -65,7 +65,7 @@ fun UpdateScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            UpdateGlassCard {
                 Text(
                     text = "Density Reset",
                     color = Color(0xFFE8EDF5),
@@ -243,13 +243,10 @@ private fun UpdateProgress(state: UpdateUiState) {
 
 @Composable
 private fun UpdateGlassCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(28.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0x9615253B), shape)
-            .border(1.dp, Color(0x84C8E5FF), shape)
-            .padding(20.dp),
+    DensityResetGlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 28.dp,
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content
     )

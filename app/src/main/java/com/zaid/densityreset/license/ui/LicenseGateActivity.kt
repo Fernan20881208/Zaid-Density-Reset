@@ -18,6 +18,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.zaid.densityreset.R
+import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.AppAppearancePreferences
+import com.zaid.densityreset.appearance.AppAppearanceViewController
 import com.zaid.densityreset.databinding.ActivityLicenseGateBinding
 import com.zaid.densityreset.license.LicenseManager
 import com.zaid.densityreset.license.domain.LicenseState
@@ -30,16 +33,20 @@ import kotlinx.coroutines.launch
 
 class LicenseGateActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLicenseGateBinding
+    private lateinit var appearanceMode: AppAppearanceMode
     private var changingText = false
     private var openingMain = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appearanceMode = AppAppearancePreferences.get(this)
+        AppAppearanceViewController.applyActivityTheme(this, appearanceMode)
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityLicenseGateBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         configureBranding()
+        applyAppearance()
         applyInsets()
         configureKeyInput()
         configureActions()
@@ -51,14 +58,31 @@ class LicenseGateActivity : AppCompatActivity() {
     }
 
     private fun configureBranding() {
-        runCatching {
-            val bytes = Base64.decode(ImageAssets.BACKGROUND_BASE64, Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        }.getOrNull()?.let(binding.licenseBackgroundImage::setImageBitmap)
+        if (appearanceMode == AppAppearanceMode.LIQUID_GLASS) {
+            runCatching {
+                val bytes = Base64.decode(ImageAssets.BACKGROUND_BASE64, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }.getOrNull()?.let(binding.licenseBackgroundImage::setImageBitmap)
+        }
         binding.licenseLogo.apply {
             setBackgroundResource(R.drawable.bg_logo_clip)
             clipToOutline = true
         }
+    }
+
+    private fun applyAppearance() {
+        AppAppearanceViewController.applyWindow(this, appearanceMode)
+        AppAppearanceViewController.applyBackdrop(
+            root = binding.licenseGateRoot,
+            backgroundImage = binding.licenseBackgroundImage,
+            scrim = binding.licenseBackgroundScrim,
+            mode = appearanceMode
+        )
+        AppAppearanceViewController.applyTaggedSurfaces(
+            root = binding.licenseGateRoot,
+            backdropSource = binding.licenseBackgroundImage,
+            mode = appearanceMode
+        )
     }
 
     private fun applyInsets() {

@@ -9,6 +9,31 @@ data class DensitySnapshot(
     val previousOverrideDensity: Int?
 )
 
+sealed interface DensityRestorationTarget {
+    data object PhysicalDensity : DensityRestorationTarget
+    data class OverrideDensity(val density: Int) : DensityRestorationTarget
+}
+
+/**
+ * Resolves the density state that existed before a game session started.
+ *
+ * Older or incomplete snapshots safely fall back to the physical density so
+ * an extreme temporary game density is never left active indefinitely.
+ */
+fun DensitySnapshot?.restorationTarget(): DensityRestorationTarget {
+    if (this == null || !hadOverride) {
+        return DensityRestorationTarget.PhysicalDensity
+    }
+
+    val savedOverride = previousOverrideDensity
+        ?.takeIf { it > 0 }
+        ?: effectiveDensity.takeIf { it > 0 }
+
+    return savedOverride
+        ?.let { DensityRestorationTarget.OverrideDensity(it) }
+        ?: DensityRestorationTarget.PhysicalDensity
+}
+
 enum class SessionStep {
     IDLE,
     VALIDATING,
@@ -30,6 +55,7 @@ data class GameSessionState(
     val selectedPreset: DensityPreset? = null,
     val targetDensity: Int? = null,
     val sessionStartedAt: Long? = null,
+    val gameLaunchedAt: Long? = null,
     val restoreAt: Long? = null,
     val currentStep: SessionStep = SessionStep.IDLE,
     val snapshot: DensitySnapshot? = null,

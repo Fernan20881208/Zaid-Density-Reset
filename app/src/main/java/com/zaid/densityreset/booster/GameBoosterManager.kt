@@ -41,6 +41,7 @@ class GameBoosterManager(
 
     private var activeAdapter: RomGameAdapter? = null
     private var activeProfile: DeviceProfile? = null
+    private var thermalDowngradeRunning = false
 
     init {
         scope.launch {
@@ -48,6 +49,7 @@ class GameBoosterManager(
                 GameBoosterRuntime.mutableState.update { state ->
                     if (state.active) state.copy(monitor = monitor) else state
                 }
+                applyThermalFallbackIfNeeded(monitor.thermal?.level)
             }
         }
     }
@@ -61,7 +63,9 @@ class GameBoosterManager(
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(packageName)
         val adapter = createAdapter(profile, packageName, diagnostic, config)
         val capabilities = adapter.detectCapabilities().copy(
-            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand(),
+            currentGameMode = diagnostic.currentMode,
+            availableGameModes = diagnostic.availableModes
         )
         var snapshot = BoosterSnapshot(
             packageName = packageName,
@@ -90,8 +94,10 @@ class GameBoosterManager(
         )
 
         val modeEnabled = config.gameBoosterEnabled && when (mode) {
-            BoosterMode.GAME -> config.gameModeEnabled
-            BoosterMode.BATTERY -> config.batteryModeEnabled
+            BoosterMode.GAME,
+            BoosterMode.BALANCED -> config.gameModeEnabled
+            BoosterMode.BATTERY,
+            BoosterMode.ULTRA_BATTERY -> config.batteryModeEnabled
             BoosterMode.MAX_PERFORMANCE,
             BoosterMode.ULTRA_MAX_PERFORMANCE -> config.maxPerformanceEnabled
         }
@@ -179,8 +185,10 @@ class GameBoosterManager(
                 }
             } else {
                 val result = when (mode) {
-                    BoosterMode.GAME -> adapter.applyGameMode(packageName)
-                    BoosterMode.BATTERY -> adapter.applyBatteryMode(packageName)
+                    BoosterMode.GAME,
+                    BoosterMode.BALANCED -> adapter.applyGameMode(packageName)
+                    BoosterMode.BATTERY,
+                    BoosterMode.ULTRA_BATTERY -> adapter.applyBatteryMode(packageName)
                     BoosterMode.MAX_PERFORMANCE -> adapter.applyPerformanceMode(packageName)
                     BoosterMode.ULTRA_MAX_PERFORMANCE -> error("Handled above")
                 }
@@ -210,7 +218,7 @@ class GameBoosterManager(
             actions += BoosterAction("Game Mode", modeFailure.orEmpty(), false)
         }
 
-        val requestedFlags = monitorFlags(config)
+        val requestedFlags = monitorFlags(config, mode)
         val overlayPreference = overlayPreferencesStore.read(packageName)
         var hasMonitorWork = false
         if (requestedFlags.anyEnabled()) {
@@ -292,13 +300,15 @@ class GameBoosterManager(
             configuredAdapter
         }
         val capabilities = configuredAdapter.detectCapabilities().copy(
-            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand(),
+            currentGameMode = diagnostic.currentMode,
+            availableGameModes = diagnostic.availableModes
         )
 
         activeAdapter = restorationAdapter
         activeProfile = profile
 
-        val requestedFlags = monitorFlags(config)
+        val requestedFlags = monitorFlags(config, snapshot.selectedMode)
         val overlayPreference = overlayPreferencesStore.read(snapshot.packageName)
         var hasMonitorWork = false
         if (requestedFlags.anyEnabled()) {
@@ -355,7 +365,9 @@ class GameBoosterManager(
         val diagnostic = GameModeCapabilityProbe(commandExecutor).diagnose(packageName)
         val adapter = createAdapter(profile, packageName, diagnostic, config)
         val capabilities = adapter.detectCapabilities().copy(
-            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand()
+            fixedPerformanceModeAvailable = detectFixedPerformanceModeCommand(),
+            currentGameMode = diagnostic.currentMode,
+            availableGameModes = diagnostic.availableModes
         )
         val current = GameBoosterRuntime.mutableState.value
         val diagnosed = current.copy(
@@ -504,12 +516,88 @@ class GameBoosterManager(
         }
     }
 
-    private fun monitorFlags(config: RemoteAppConfig): MonitorFlags = MonitorFlags(
+    private fun monitorFlags(
+        config: RemoteAppConfig,
+        mode: BoosterMode?
+    ): MonitorFlags = MonitorFlags(
         ram = config.ramMonitorEnabled,
         battery = config.batteryMonitorEnabled,
         thermal = config.thermalMonitorEnabled,
-        fps = config.fpsMonitorEnabled
+        fps = config.fpsMonitorEnabled && mode != BoosterMode.ULTRA_BATTERY
     )
+
+    private suspend fun applyThermalFallbackIfNeeded(level: ThermalLevel?) {
+        if (level == null || thermalDowngradeRunning) return
+        val state = GameBoosterRuntime.mutableState.value
+        if (!state.active) return
+        val requested = thermalFallbackMode(
+            current = state.mode,
+            thermalLevel = level,
+            batteryModeAvailable = state.capabilities.batteryModeAvailable
+        ) ?: return
+        val adapter = activeAdapter ?: return
+        val storedSnapshot = snapshotStore.read() ?: return
+
+        thermalDowngradeRunning = true
+        try {
+            var snapshot = storedSnapshot
+            if (snapshot.fixedPerformanceModeChanged) {
+                val fixedRestore = setFixedPerformanceMode(enabled = false)
+                if (fixedRestore.isSuccess) {
+                    snapshot = snapshot.copy(fixedPerformanceModeChanged = false)
+                    snapshotStore.save(snapshot)
+                }
+            }
+
+            val applied = when (requested) {
+                BoosterMode.ULTRA_BATTERY -> adapter.applyBatteryMode(snapshot.packageName)
+                BoosterMode.BALANCED -> adapter.applyGameMode(snapshot.packageName)
+                else -> Result.failure(
+                    IllegalStateException("Transición térmica no compatible.")
+                )
+            }
+            applied.onSuccess {
+                snapshot = snapshot.copy(
+                    selectedMode = requested,
+                    gameModeChanged = true
+                )
+                snapshotStore.save(snapshot)
+                if (requested == BoosterMode.ULTRA_BATTERY) {
+                    performanceMonitor.start(
+                        snapshot.packageName,
+                        monitorFlags(RemoteConfigManager.currentConfig(), requested),
+                        state.capabilities
+                    )
+                }
+                val message = if (requested == BoosterMode.ULTRA_BATTERY) {
+                    "Temperatura crítica: se activó Ultra ahorro de batería."
+                } else {
+                    "Temperatura alta: se bajó automáticamente a Equilibrado."
+                }
+                GameBoosterRuntime.mutableState.update { current ->
+                    current.copy(
+                        mode = requested,
+                        capabilities = current.capabilities.copy(
+                            currentGameMode = if (requested == BoosterMode.ULTRA_BATTERY) {
+                                "battery"
+                            } else {
+                                "standard"
+                            }
+                        ),
+                        actionsApplied = current.actionsApplied + BoosterAction(
+                            name = "Protección térmica adaptativa",
+                            detail = message,
+                            applied = true
+                        ),
+                        message = message,
+                        thermalAdaptationMessage = message
+                    )
+                }
+            }
+        } finally {
+            thermalDowngradeRunning = false
+        }
+    }
 
     private fun monitorActions(
         flags: MonitorFlags,
@@ -602,7 +690,9 @@ private fun MonitorFlags.anyEnabled(): Boolean = ram || battery || thermal || fp
 
 private fun BoosterMode.commandModeLabel(): String = when (this) {
     BoosterMode.GAME -> "Standard"
+    BoosterMode.BALANCED -> "Standard · equilibrado"
     BoosterMode.BATTERY -> "Battery"
+    BoosterMode.ULTRA_BATTERY -> "Battery · muestreo ligero"
     BoosterMode.MAX_PERFORMANCE -> "Performance"
     BoosterMode.ULTRA_MAX_PERFORMANCE -> "Performance + Fixed Performance"
 }

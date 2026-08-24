@@ -5,12 +5,54 @@ Aplicación Android en Kotlin para controlar la densidad lógica mediante Shizuk
 ## Funciones actuales
 
 - Selección de Free Fire (`com.dts.freefireth`) o Free Fire MAX (`com.dts.freefiremax`).
-- Perfiles por juego: Sensi Ultra 20 DPI, Sensi Alta 72 DPI y Sensi Baja 280 DPI.
+- Perfiles por juego: Sensi Ultra 20 DPI, Muy Alta 46 DPI, Alta 72 DPI, Media Alta 176 DPI y Baja 280 DPI.
 - 20 DPI mediante Binder interno de WindowManager con identidad `shell` de Shizuku; nunca mediante `wm size`.
-- Snapshot exacto del DPI anterior, foreground service de 30 segundos, notificación y restauración automática/manual.
+- Snapshot exacto del DPI anterior, ventana verificada de 20 segundos, seguimiento de salida del juego y restauración automática/manual.
 - Gesto de emergencia con ambos botones de volumen.
-- Logo `file (1).svg`, fondo `file.svg` y UI Liquid Glass.
+- Tiles rápidos independientes `FF` y `FFM`, más atajos dinámicos que usan el perfil DPI predeterminado de cada juego.
+- Automatizaciones por juego para DND Prioridad, brillo, bloqueo de rotación y volumen, siempre con snapshot y restauración del valor anterior.
+- Grabación opcional mediante MediaProjection: video y audio interno cuando Android y el juego lo permiten, sin capturar el micrófono.
+- Tiempo de juego total y por perfil DPI, protección térmica adaptativa y matriz de capacidades reales del dispositivo.
+- Notificación compacta tipo isla en el panel del sistema con DPI, batería, temperatura, tiempo, modo y acciones de restauración/grabación.
+- Selector global de apariencia con modo AMOLED de negro puro y modo Liquid Glass predeterminado.
+- Refracción Liquid Glass real en pantallas View/XML y Compose mediante
+  [`QWEA0/Liquid-Glass-Android`](https://github.com/QWEA0/Liquid-Glass-Android), con AGSL en
+  Android 13+ y fallback compatible desde API 24.
+- Logo `file (1).svg`, fondo `file.svg` y superficies `LiquidGlassView` pasivas detrás de los
+  paneles Compose; el contenido y los gestos siguen siendo propiedad de Compose.
 - Acceso protegido mediante licencias administradas por servidor.
+
+## Apariencia 1.7.0
+
+La opción se guarda en preferencias y se aplica al arranque, licencia, actualización, Game Launcher
+y controles clásicos:
+
+- **Liquid Glass**: opción predeterminada; usa el motor QWEA0 en los paneles de toda la interfaz,
+  incluidos los grupos internos de sensibilidad, Game Booster, métricas y selector de apariencia,
+  con fondo detallado, refracción dinámica, dispersión moderada, brillo por sensor limitado al
+  encabezado y fallback automático de accesibilidad.
+- **AMOLED**: fondo `#000000`, barras del sistema negras y paneles opacos oscuros para conservar
+  píxeles negros en pantallas OLED. Los controles seleccionados y el HUD de juego también evitan
+  fondos azules simulados.
+
+El Game Launcher cambia entre ambos modos inmediatamente, sin recrear la actividad, y mantiene la
+selección para el siguiente inicio.
+
+La dependencia de Liquid Glass está fijada a `v2.0.2`. Consulta
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) para la atribución.
+
+## Game Launcher 1.8.0
+
+La versión 1.8.0 conserva los cuatro modos anteriores del Game Booster y agrega `Equilibrado` y
+`Ultra ahorro de batería`. Si Android informa temperatura alta, los modos de rendimiento pueden
+bajar temporalmente a `Equilibrado`; ante un estado térmico crítico, se intenta `Ultra ahorro de
+batería` cuando el modo Battery oficial está disponible. Nunca se desactivan las protecciones
+térmicas del sistema.
+
+Los cambios de DND, brillo, rotación, volumen, Game Mode y DPI se guardan antes de aplicarse. Al
+confirmar la salida de Free Fire/Free Fire MAX, al restaurar manualmente o al recuperar una sesión
+interrumpida, cada subsistema intenta volver al valor exacto anterior. Las grabaciones se guardan
+localmente en `Movies/Density Reset`; Android solicita consentimiento de captura en cada sesión.
 
 # Sistema de licencias 1.4.0
 
@@ -202,7 +244,7 @@ GitHub Actions ejecuta:
 
 ```bash
 deno test supabase/functions/license-api/logic.test.ts
-./gradlew clean lintDebug testDebugUnitTest assembleDebug
+./gradlew clean lintDebug testDebugUnitTest assembleDebug assembleRelease
 ```
 
 Además, `supabase/tests/license_system.sql` cubre semántica de activación, expiración, device binding, reset de dispositivo, estados y rate limit a nivel de base de datos. La matriz manual documentada incluye key nueva, incorrecta, expirada, revocada, deshabilitada, permanente, 1/30 días, otro dispositivo, reset, reactivación, servidor sin conexión, gracia offline, token expirado, reinicio, logout, generación individual/masiva y CSV.

@@ -16,4 +16,11 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowDisablePreview">false</item>
     </style>
+
+    <style name="Theme.DensityReset.Amoled" parent="Theme.DensityReset">
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:statusBarColor">#FF000000</item>
+        <item name="android:navigationBarColor">#FF000000</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

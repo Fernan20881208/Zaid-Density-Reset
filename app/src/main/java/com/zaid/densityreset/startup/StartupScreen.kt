@@ -3,16 +3,14 @@ package com.zaid.densityreset.startup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,10 +19,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.zaid.densityreset.appearance.DensityResetGlassPanel
+import com.zaid.densityreset.appearance.LocalAppAppearanceMode
+import com.zaid.densityreset.appearance.appearanceBackground
 
 @Composable
 fun StartupScreen(
@@ -32,9 +32,8 @@ fun StartupScreen(
     onRetry: () -> Unit
 ) {
     BackHandler(enabled = gate !is StartupGate.Ready) { }
-    val background = Brush.verticalGradient(
-        listOf(Color(0xFF07101F), Color(0xFF172B47), Color(0xFF080D17))
-    )
+    val appearanceMode = LocalAppAppearanceMode.current
+    val background = appearanceBackground(appearanceMode)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -102,15 +101,13 @@ fun StartupScreen(
 
 @Composable
 private fun GateCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(28.dp)
-    Column(
+    DensityResetGlassPanel(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = 560.dp)
-            .padding(20.dp)
-            .background(Color(0x9615253B), shape)
-            .border(1.dp, Color(0x84C8E5FF), shape)
-            .padding(22.dp),
+            .padding(20.dp),
+        cornerRadius = 28.dp,
+        contentPadding = PaddingValues(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content

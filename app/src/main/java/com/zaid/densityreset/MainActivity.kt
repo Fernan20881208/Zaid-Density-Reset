@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -39,6 +38,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.snackbar.Snackbar
 import com.zaid.densityreset.accessibility.VolumeShortcutAccessibilityService
+import com.zaid.densityreset.appearance.AppAppearanceMode
+import com.zaid.densityreset.appearance.AppAppearancePreferences
+import com.zaid.densityreset.appearance.AppAppearanceViewController
 import com.zaid.densityreset.databinding.ActivityMainBinding
 import com.zaid.densityreset.databinding.DialogUltraConfirmationBinding
 import com.zaid.densityreset.databinding.DialogVeryHighConfirmationBinding
@@ -66,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var densityBinding: ViewDensityPanelBinding
     private lateinit var gameProfileBinding: ViewGameProfilePanelBinding
+    private lateinit var appearanceMode: AppAppearanceMode
 
     private val densityViewModel: DensityViewModel by viewModels()
     private val gameProfileViewModel: GameProfileViewModel by viewModels()
@@ -96,6 +99,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appearanceMode = AppAppearancePreferences.get(this)
+        AppAppearanceViewController.applyActivityTheme(this, appearanceMode)
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -105,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         applySystemBarInsets()
         attachDensityPanel()
         attachGameProfilePanel()
+        applyAppearance()
 
         configurePreferences()
         configureActions()
@@ -128,8 +134,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configureBranding() {
-        decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
-            binding.backgroundImage.setImageBitmap(bitmap)
+        if (appearanceMode == AppAppearanceMode.LIQUID_GLASS) {
+            decodeImage(ImageAssets.BACKGROUND_BASE64)?.let { bitmap ->
+                binding.backgroundImage.setImageBitmap(bitmap)
+            }
         }
         binding.headerLogo.apply {
             setImageResource(R.drawable.zaid_logo)
@@ -170,6 +178,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configurePreferences() {
+        binding.appearanceModeGroup.check(
+            if (appearanceMode == AppAppearanceMode.AMOLED) {
+                R.id.radioAmoled
+            } else {
+                R.id.radioLiquidGlass
+            }
+        )
+        binding.appearanceModeGroup.setOnCheckedChangeListener { _, checkedId ->
+            val selected = when (checkedId) {
+                R.id.radioAmoled -> AppAppearanceMode.AMOLED
+                R.id.radioLiquidGlass -> AppAppearanceMode.LIQUID_GLASS
+                else -> return@setOnCheckedChangeListener
+            }
+            if (selected != appearanceMode) {
+                AppAppearancePreferences.set(this, selected)
+                recreate()
+            }
+        }
+
         binding.switchBlockVolume.isChecked =
             AppPreferences.shouldBlockVolumeChanges(this)
         binding.switchVibration.isChecked =
@@ -181,6 +208,21 @@ class MainActivity : AppCompatActivity() {
         binding.switchVibration.setOnCheckedChangeListener { _, checked ->
             AppPreferences.setVibrateAfterSuccess(this, checked)
         }
+    }
+
+    private fun applyAppearance() {
+        AppAppearanceViewController.applyWindow(this, appearanceMode)
+        AppAppearanceViewController.applyBackdrop(
+            root = binding.root,
+            backgroundImage = binding.backgroundImage,
+            scrim = binding.backgroundScrim,
+            mode = appearanceMode
+        )
+        AppAppearanceViewController.applyTaggedSurfaces(
+            root = binding.root,
+            backdropSource = binding.backgroundImage,
+            mode = appearanceMode
+        )
     }
 
     private fun configureActions() {
@@ -639,7 +681,6 @@ class MainActivity : AppCompatActivity() {
         val dialogBinding = DialogVeryHighConfirmationBinding.inflate(layoutInflater)
         dialog.setContentView(dialogBinding.root)
         dialog.setCancelable(true)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialogBinding.buttonApplyVeryHigh.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             dialog.dismiss()
@@ -647,6 +688,12 @@ class MainActivity : AppCompatActivity() {
         }
         dialogBinding.buttonCancelVeryHigh.setOnClickListener { dialog.dismiss() }
         dialog.show()
+        AppAppearanceViewController.applyDialogSurface(
+            dialog = dialog,
+            surface = dialogBinding.root,
+            backdropSource = binding.root,
+            mode = appearanceMode
+        )
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.92f).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -658,7 +705,6 @@ class MainActivity : AppCompatActivity() {
         val dialogBinding = DialogUltraConfirmationBinding.inflate(layoutInflater)
         dialog.setContentView(dialogBinding.root)
         dialog.setCancelable(true)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         val handler = Handler(Looper.getMainLooper())
         var confirmed = false
@@ -708,6 +754,12 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnDismissListener { resetHoldState() }
 
         dialog.show()
+        AppAppearanceViewController.applyDialogSurface(
+            dialog = dialog,
+            surface = dialogBinding.root,
+            backdropSource = binding.root,
+            mode = appearanceMode
+        )
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.92f).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT

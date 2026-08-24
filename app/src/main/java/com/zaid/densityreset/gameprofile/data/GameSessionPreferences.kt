@@ -17,6 +17,7 @@ internal object GameSessionPreferenceKeys {
     val selectedPreset = stringPreferencesKey("selected_preset")
     val targetDensity = intPreferencesKey("target_density")
     val sessionStartedAt = longPreferencesKey("session_started_at")
+    val gameLaunchedAt = longPreferencesKey("game_launched_at")
     val restoreAt = longPreferencesKey("restore_at")
     val currentSessionStep = stringPreferencesKey("current_session_step")
 
