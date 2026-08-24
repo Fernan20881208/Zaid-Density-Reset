@@ -16,6 +16,7 @@ import com.zaid.densityreset.appearance.AppAppearanceViewController
 import com.zaid.densityreset.appearance.DensityResetAppearance
 import com.zaid.densityreset.launcher.GameLauncherActivity
 import com.zaid.densityreset.license.ui.LicenseGateActivity
+import com.zaid.densityreset.quicklaunch.QuickLaunchContract
 import com.zaid.densityreset.update.UpdateScreen
 import com.zaid.densityreset.update.UpdateViewModel
 import kotlinx.coroutines.launch
@@ -26,6 +27,7 @@ class StartupActivity : ComponentActivity() {
     private var desiredDestination = StartupDestination.GAME_LAUNCHER
     private var destinationOpened = false
     private var licenseOpened = false
+    private var requestedGamePackage: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val appearanceMode = AppAppearancePreferences.get(this)
@@ -101,6 +103,9 @@ class StartupActivity : ComponentActivity() {
         startActivity(
             Intent(this, target).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                requestedGamePackage?.let {
+                    putExtra(QuickLaunchContract.EXTRA_GAME_PACKAGE, it)
+                }
             }
         )
         finish()
@@ -118,6 +123,12 @@ class StartupActivity : ComponentActivity() {
     }
 
     private fun resolveDestination(intent: Intent?) {
+        requestedGamePackage = if (intent?.action == QuickLaunchContract.ACTION_LAUNCH_GAME) {
+            intent.getStringExtra(QuickLaunchContract.EXTRA_GAME_PACKAGE)
+                ?.takeIf { com.zaid.densityreset.gameprofile.domain.SupportedGame.fromPackageName(it) != null }
+        } else {
+            null
+        }
         desiredDestination = when (intent?.action) {
             ACTION_OPEN_LEGACY_CONTROLS -> StartupDestination.LEGACY_CONTROLS
             else -> StartupDestination.GAME_LAUNCHER

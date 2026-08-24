@@ -7,13 +7,15 @@ import com.zaid.densityreset.gameprofile.data.GameSessionRepository
 import com.zaid.densityreset.gameprofile.data.GameSessionRepositoryImpl
 import com.zaid.densityreset.gameprofile.service.DpiGameSessionService
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
+import com.zaid.densityreset.recording.ScreenCaptureGrant
 import com.zaid.densityreset.shizuku.ShizukuManager
 
 interface GameSessionController {
     suspend fun startSession(
         game: SupportedGame,
         preset: DensityPreset,
-        boosterMode: BoosterMode? = null
+        boosterMode: BoosterMode? = null,
+        screenCaptureGrant: ScreenCaptureGrant? = null
     ): GameSessionResult
 
     suspend fun restoreNow(): GameSessionResult
@@ -34,7 +36,8 @@ class GameSessionControllerImpl(
     override suspend fun startSession(
         game: SupportedGame,
         preset: DensityPreset,
-        boosterMode: BoosterMode?
+        boosterMode: BoosterMode?,
+        screenCaptureGrant: ScreenCaptureGrant?
     ): GameSessionResult {
         val current = repository.read()
         if (current.sessionActive) {
@@ -60,7 +63,8 @@ class GameSessionControllerImpl(
                 context = appContext,
                 game = game,
                 preset = preset,
-                boosterMode = boosterMode
+                boosterMode = boosterMode,
+                screenCaptureGrant = screenCaptureGrant
             )
             GameSessionResult.Success("Preparando sesión…")
         }.getOrElse { error ->

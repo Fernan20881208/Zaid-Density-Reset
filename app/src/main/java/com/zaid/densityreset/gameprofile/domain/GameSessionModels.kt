@@ -55,6 +55,7 @@ data class GameSessionState(
     val selectedPreset: DensityPreset? = null,
     val targetDensity: Int? = null,
     val sessionStartedAt: Long? = null,
+    val gameLaunchedAt: Long? = null,
     val restoreAt: Long? = null,
     val currentStep: SessionStep = SessionStep.IDLE,
     val snapshot: DensitySnapshot? = null,

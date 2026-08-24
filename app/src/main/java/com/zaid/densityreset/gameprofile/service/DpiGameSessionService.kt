@@ -7,15 +7,21 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
+import android.widget.RemoteViews
+import android.view.View
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.zaid.densityreset.R
 import com.zaid.densityreset.accessibility.DpiGameLockBridge
+import com.zaid.densityreset.analytics.GamePlaytimeRepositoryImpl
+import com.zaid.densityreset.automation.GameEnvironmentManager
 import com.zaid.densityreset.booster.BoosterMode
 import com.zaid.densityreset.booster.BoosterResult
 import com.zaid.densityreset.booster.GameBoosterManager
@@ -35,6 +41,8 @@ import com.zaid.densityreset.gameprofile.domain.restorationTarget
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuCommandExecutor
 import com.zaid.densityreset.gameprofile.shizuku.ShizukuGameController
 import com.zaid.densityreset.icons.DensityIconInvalidationCoordinator
+import com.zaid.densityreset.recording.GameScreenRecorder
+import com.zaid.densityreset.recording.ScreenCaptureGrant
 import com.zaid.densityreset.shizuku.ShizukuManager
 import com.zaid.densityreset.startup.StartupActivity
 import kotlinx.coroutines.CancellationException
@@ -74,6 +82,15 @@ class DpiGameSessionService : Service() {
     private val boosterManager by lazy {
         GameBoosterManager(applicationContext, commandExecutor)
     }
+    private val environmentManager by lazy {
+        GameEnvironmentManager(applicationContext)
+    }
+    private val playtimeRepository by lazy {
+        GamePlaytimeRepositoryImpl(applicationContext)
+    }
+    private val screenRecorder by lazy {
+        GameScreenRecorder(applicationContext)
+    }
     private val notificationManager by lazy {
         getSystemService(NotificationManager::class.java)
     }
@@ -82,6 +99,7 @@ class DpiGameSessionService : Service() {
     private var timerJob: Job? = null
     private var gameWatchJob: Job? = null
     private var boosterStateJob: Job? = null
+    private var notificationHeartbeatJob: Job? = null
     private var foregroundStarted = false
     private var gameExitConfirmed = false
 
@@ -99,12 +117,24 @@ class DpiGameSessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val projectionData = intent?.projectionDataExtra()
+        val screenCaptureGrant = projectionData?.let {
+            ScreenCaptureGrant(
+                resultCode = intent.getIntExtra(EXTRA_PROJECTION_RESULT_CODE, 0),
+                data = it,
+                requestInternalAudio = intent.getBooleanExtra(
+                    EXTRA_REQUEST_INTERNAL_AUDIO,
+                    false
+                )
+            )
+        }
         ensureForeground(
             buildNotification(
                 title = getString(R.string.game_session_preparing),
                 text = getString(R.string.game_session_checking_state),
                 includeRestore = false
-            )
+            ),
+            mediaProjection = screenCaptureGrant != null
         )
 
         when (intent?.action) {
@@ -127,7 +157,22 @@ class DpiGameSessionService : Service() {
                     }
                 } else {
                     launchOperation {
-                        startSessionFlow(game, preset, boosterMode)
+                        startSessionFlow(game, preset, boosterMode, screenCaptureGrant)
+                    }
+                }
+            }
+
+            ACTION_STOP_RECORDING -> {
+                serviceScope.launch {
+                    screenRecorder.stop()
+                    val session = repository.read()
+                    if (session.sessionActive) {
+                        updateSessionNotification(
+                            session,
+                            session.restoreAt?.let { secondsRemaining(session) }
+                        )
+                    } else {
+                        stopServiceCleanly()
                     }
                 }
             }
@@ -167,6 +212,7 @@ class DpiGameSessionService : Service() {
         timerJob?.cancel()
         gameWatchJob?.cancel()
         boosterStateJob?.cancel()
+        notificationHeartbeatJob?.cancel()
         operationJob?.cancel()
         boosterManager.close()
         serviceScope.cancel()
@@ -195,7 +241,8 @@ class DpiGameSessionService : Service() {
     private suspend fun startSessionFlow(
         game: SupportedGame,
         preset: DensityPreset,
-        boosterMode: BoosterMode?
+        boosterMode: BoosterMode?,
+        screenCaptureGrant: ScreenCaptureGrant?
     ) {
         val existing = repository.read()
         if (existing.sessionActive) {
@@ -241,6 +288,9 @@ class DpiGameSessionService : Service() {
             snapshot = densitySnapshot,
             startedAt = System.currentTimeMillis()
         )
+
+        updatePreparingNotification(game, preset, "Aplicando automatizaciones")
+        environmentManager.apply(game)
 
         repository.updateStep(SessionStep.CLOSING_GAME)
         updatePreparingNotification(game, preset, "Cerrando el juego")
@@ -295,10 +345,24 @@ class DpiGameSessionService : Service() {
             abortAndRestoreAll("No se pudo abrir el juego. Se restaurará la sesión.")
             return
         }
+        repository.markGameLaunched(System.currentTimeMillis())
+
+        if (screenCaptureGrant != null) {
+            delay(RECORDING_START_DELAY_MILLIS)
+            screenRecorder.start(
+                game = game,
+                resultCode = screenCaptureGrant.resultCode,
+                projectionData = screenCaptureGrant.data,
+                requestInternalAudio = screenCaptureGrant.requestInternalAudio
+            ).onFailure { error ->
+                showToast(error.message ?: "No se pudo iniciar la grabación de pantalla.")
+            }
+        }
 
         repository.markSessionActive(restoreAt)
         DpiGameLockBridge.notifySessionChanged()
         startGameWatcher(game)
+        startNotificationHeartbeat()
         updateSessionNotification(repository.read(), secondsRemaining(repository.read()))
     }
 
@@ -308,6 +372,8 @@ class DpiGameSessionService : Service() {
             if (boosterManager.hasSnapshot()) {
                 boosterManager.restore()
             }
+            environmentManager.restore()
+            screenRecorder.stop()
             stopServiceCleanly()
             return
         }
@@ -375,15 +441,17 @@ class DpiGameSessionService : Service() {
 
         val densityRestore = executeDensityRestoration(session.snapshot)
         if (densityRestore.isFailure) {
+            screenRecorder.stop()
+            val environmentRestore = environmentManager.restore()
             val boosterRestore = boosterManager.restore()
             val message = densityRestore.exceptionOrNull()?.message
                 ?: getString(R.string.game_session_restore_failed)
             repository.markRestorationFailure(
-                if (boosterRestore is BoosterResult.Failure) {
-                    "$message ${boosterRestore.message}"
-                } else {
-                    message
-                }
+                listOfNotNull(
+                    message,
+                    (boosterRestore as? BoosterResult.Failure)?.message,
+                    environmentRestore.exceptionOrNull()?.message
+                ).joinToString(" ")
             )
             DpiGameLockBridge.notifySessionChanged()
             updateSessionNotification(repository.read(), null)
@@ -392,15 +460,20 @@ class DpiGameSessionService : Service() {
         }
 
         DpiGameLockBridge.notifySessionChanged()
-        val hasBooster = boosterManager.hasSnapshot()
-        if (hasBooster && !gameExitConfirmed) {
+        if (!gameExitConfirmed) {
             repository.markBoosterActive()
             DpiGameLockBridge.notifySessionChanged()
             updateSessionNotification(repository.read(), null)
         } else {
+            screenRecorder.stop()
+            val environmentRestore = environmentManager.restore()
             val boosterRestore = boosterManager.restore()
-            if (boosterRestore is BoosterResult.Failure) {
-                repository.markRestorationFailure(boosterRestore.message)
+            val failure = listOfNotNull(
+                (boosterRestore as? BoosterResult.Failure)?.message,
+                environmentRestore.exceptionOrNull()?.message
+            ).joinToString(" ")
+            if (failure.isNotBlank()) {
+                repository.markRestorationFailure(failure)
                 updateSessionNotification(repository.read(), null)
                 return
             }
@@ -447,13 +520,35 @@ class DpiGameSessionService : Service() {
         }
     }
 
+    private fun startNotificationHeartbeat() {
+        notificationHeartbeatJob?.cancel()
+        notificationHeartbeatJob = serviceScope.launch {
+            while (isActive) {
+                val session = repository.read()
+                if (!session.sessionActive) return@launch
+                updateSessionNotification(
+                    session,
+                    session.restoreAt?.let { secondsRemaining(session) }
+                )
+                delay(NOTIFICATION_HEARTBEAT_MILLIS)
+            }
+        }
+    }
+
     private suspend fun handleConfirmedGameExit() {
         val session = repository.read()
         if (!session.sessionActive) return
 
+        recordPlaytime(session)
+        screenRecorder.stop()
+        val environmentRestore = environmentManager.restore()
         val boosterRestore = boosterManager.restore()
-        if (boosterRestore is BoosterResult.Failure) {
-            repository.markRestorationFailure(boosterRestore.message)
+        val failure = listOfNotNull(
+            (boosterRestore as? BoosterResult.Failure)?.message,
+            environmentRestore.exceptionOrNull()?.message
+        ).joinToString(" ")
+        if (failure.isNotBlank()) {
+            repository.markRestorationFailure(failure)
             DpiGameLockBridge.notifySessionChanged()
             updateSessionNotification(repository.read(), session.restoreAt?.let { secondsRemaining(session) })
             return
@@ -479,10 +574,19 @@ class DpiGameSessionService : Service() {
     private suspend fun abortAndRestoreAll(message: String) {
         timerJob?.cancel()
         gameWatchJob?.cancel()
+        notificationHeartbeatJob?.cancel()
         val session = repository.read()
+        recordPlaytime(session)
+        val recording = screenRecorder.stop()
+        val environment = environmentManager.restore()
         val booster = boosterManager.restore()
         val density = executeDensityRestoration(session.snapshot)
-        if (booster !is BoosterResult.Failure && density.isSuccess) {
+        if (
+            booster !is BoosterResult.Failure &&
+            density.isSuccess &&
+            environment.isSuccess &&
+            recording.isSuccess
+        ) {
             repository.failAndClear(message)
             DpiGameLockBridge.notifySessionChanged()
             showToast(message)
@@ -493,6 +597,14 @@ class DpiGameSessionService : Service() {
                 if (booster is BoosterResult.Failure) {
                     if (isNotEmpty()) append(" ")
                     append(booster.message)
+                }
+                environment.exceptionOrNull()?.message?.let {
+                    if (isNotEmpty()) append(" ")
+                    append(it)
+                }
+                recording.exceptionOrNull()?.message?.let {
+                    if (isNotEmpty()) append(" ")
+                    append(it)
                 }
             }.ifBlank { getString(R.string.game_session_restore_failed) }
             repository.markRestorationFailure(failure)
@@ -505,6 +617,8 @@ class DpiGameSessionService : Service() {
     private suspend fun restoreEverything(source: String) {
         val session = repository.read()
         if (!session.sessionActive) {
+            screenRecorder.stop()
+            environmentManager.restore()
             boosterManager.restore()
             DpiGameLockBridge.notifySessionChanged()
             stopServiceCleanly()
@@ -518,9 +632,17 @@ class DpiGameSessionService : Service() {
             null
         )
 
+        recordPlaytime(session)
+        val recording = screenRecorder.stop()
+        val environment = environmentManager.restore()
         val booster = boosterManager.restore()
         val density = executeDensityRestoration(session.snapshot)
-        if (booster !is BoosterResult.Failure && density.isSuccess) {
+        if (
+            booster !is BoosterResult.Failure &&
+            density.isSuccess &&
+            environment.isSuccess &&
+            recording.isSuccess
+        ) {
             repository.finishSession("DPI y Game Booster restaurados correctamente.")
             DpiGameLockBridge.notifySessionChanged()
             if (source != RESTORE_SOURCE_RECOVERY) {
@@ -533,6 +655,14 @@ class DpiGameSessionService : Service() {
                 if (booster is BoosterResult.Failure) {
                     if (isNotEmpty()) append(" ")
                     append(booster.message)
+                }
+                environment.exceptionOrNull()?.message?.let {
+                    if (isNotEmpty()) append(" ")
+                    append(it)
+                }
+                recording.exceptionOrNull()?.message?.let {
+                    if (isNotEmpty()) append(" ")
+                    append(it)
                 }
             }.ifBlank { getString(R.string.game_session_restore_failed) }
             repository.markRestorationFailure(message)
@@ -551,6 +681,20 @@ class DpiGameSessionService : Service() {
                 restoreDensityOverride(target.density)
             }
         }
+    }
+
+    private suspend fun recordPlaytime(session: GameSessionState) {
+        val game = session.selectedGame ?: return
+        val preset = session.selectedPreset ?: return
+        val sessionId = session.sessionStartedAt ?: return
+        val launchedAt = session.gameLaunchedAt ?: return
+        playtimeRepository.recordSession(
+            game = game,
+            preset = preset,
+            sessionId = sessionId,
+            startedAt = launchedAt,
+            endedAt = System.currentTimeMillis()
+        )
     }
 
     private suspend fun restoreDensityOverride(density: Int): Result<Unit> {
@@ -619,6 +763,8 @@ class DpiGameSessionService : Service() {
     }
 
     private suspend fun failWithoutRestoration(message: String) {
+        screenRecorder.stop()
+        environmentManager.restore()
         boosterManager.restore()
         repository.failAndClear(message)
         DpiGameLockBridge.notifySessionChanged()
@@ -632,6 +778,8 @@ class DpiGameSessionService : Service() {
         if (session.sessionActive) {
             abortAndRestoreAll(message)
         } else {
+            screenRecorder.stop()
+            environmentManager.restore()
             boosterManager.restore()
             repository.failAndClear(message)
             DpiGameLockBridge.notifySessionChanged()
@@ -723,11 +871,49 @@ class DpiGameSessionService : Service() {
             if (metrics.isNotBlank()) add(metrics)
         }.joinToString(" · ")
 
+        val batterySnapshot = readBatterySnapshot()
+        val batteryPercent = booster.monitor.battery?.percent ?: batterySnapshot.percent
+        val battery = batteryPercent?.let { "$it%" } ?: "—%"
+        val dpi = if (session.currentStep == SessionStep.BOOSTER_ACTIVE) {
+            "DPI restaurado"
+        } else {
+            "${preset.density} DPI"
+        }
+        val island = RemoteViews(packageName, R.layout.notification_game_island).apply {
+            setTextViewText(
+                R.id.islandTitle,
+                "${gameShortName(game)} · $dpi · $battery"
+            )
+            setTextViewText(
+                R.id.islandSubtitle,
+                listOfNotNull(
+                    booster.monitor.thermal?.temperatureCelsius?.let { "${it.roundToInt()}°C" },
+                    batterySnapshot.temperatureCelsius
+                        ?.takeIf { booster.monitor.thermal?.temperatureCelsius == null }
+                        ?.let { "${it.roundToInt()}°C" },
+                    formatElapsed(session.gameLaunchedAt),
+                    mode?.displayName
+                ).joinToString(" · ").ifBlank { "Sesión activa" }
+            )
+            setOnClickPendingIntent(
+                R.id.islandRestore,
+                restorePendingIntent(RESTORE_SOURCE_NOTIFICATION)
+            )
+            setViewVisibility(
+                R.id.islandStopRecording,
+                if (screenRecorder.isRecording) View.VISIBLE else View.GONE
+            )
+            if (screenRecorder.isRecording) {
+                setOnClickPendingIntent(R.id.islandStopRecording, stopRecordingPendingIntent())
+            }
+        }
+
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_density)
             .setContentTitle(title)
             .setContentText(line)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(line))
+            .setCustomContentView(island)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setContentIntent(openAppPendingIntent())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -738,6 +924,10 @@ class DpiGameSessionService : Service() {
                 getString(R.string.restore_now),
                 restorePendingIntent(RESTORE_SOURCE_NOTIFICATION)
             )
+
+        if (screenRecorder.isRecording) {
+            builder.addAction(0, "Detener grabación", stopRecordingPendingIntent())
+        }
 
         if (session.currentStep != SessionStep.BOOSTER_ACTIVE && seconds != null) {
             builder.setProgress(
@@ -770,6 +960,43 @@ class DpiGameSessionService : Service() {
     private fun formatGigabytes(bytes: Long): String =
         String.format(java.util.Locale.US, "%.1f", bytes.toDouble() / GIBIBYTE)
 
+    private fun formatElapsed(startedAt: Long?): String? {
+        val start = startedAt ?: return null
+        val totalSeconds = ((System.currentTimeMillis() - start).coerceAtLeast(0L) / 1_000L)
+        val hours = totalSeconds / 3_600L
+        val minutes = (totalSeconds % 3_600L) / 60L
+        val seconds = totalSeconds % 60L
+        return if (hours > 0L) {
+            String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    private fun gameShortName(game: SupportedGame): String = when (game) {
+        SupportedGame.FREE_FIRE -> "FF"
+        SupportedGame.FREE_FIRE_MAX -> "FFM"
+    }
+
+    private fun readBatterySnapshot(): BatterySnapshot {
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            ?: return BatterySnapshot()
+        val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        val percent = if (level >= 0 && scale > 0) {
+            ((level * 100f) / scale).roundToInt().coerceIn(0, 100)
+        } else {
+            null
+        }
+        val rawTemperature = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+        return BatterySnapshot(
+            percent = percent,
+            temperatureCelsius = rawTemperature
+                .takeIf { it != Int.MIN_VALUE }
+                ?.div(10f)
+        )
+    }
+
     private fun buildNotification(
         title: String,
         text: String,
@@ -795,12 +1022,17 @@ class DpiGameSessionService : Service() {
         return builder.build()
     }
 
-    private fun ensureForeground(notification: Notification) {
+    private fun ensureForeground(
+        notification: Notification,
+        mediaProjection: Boolean = false
+    ) {
         if (foregroundStarted) return
-        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        } else {
-            0
+        var foregroundType = 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            foregroundType = foregroundType or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        }
+        if (mediaProjection && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            foregroundType = foregroundType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         }
         ServiceCompat.startForeground(
             this,
@@ -831,6 +1063,15 @@ class DpiGameSessionService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    private fun stopRecordingPendingIntent(): PendingIntent = PendingIntent.getService(
+        this,
+        REQUEST_STOP_RECORDING,
+        Intent(this, DpiGameSessionService::class.java).apply {
+            action = ACTION_STOP_RECORDING
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         notificationManager.createNotificationChannel(
@@ -852,10 +1093,19 @@ class DpiGameSessionService : Service() {
     private fun stopServiceCleanly() {
         timerJob?.cancel()
         gameWatchJob?.cancel()
+        notificationHeartbeatJob?.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         foregroundStarted = false
         stopSelf()
     }
+
+    private fun Intent.projectionDataExtra(): Intent? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            getParcelableExtra(EXTRA_PROJECTION_DATA)
+        }
 
     companion object {
         private const val ACTION_START_SESSION =
@@ -864,10 +1114,15 @@ class DpiGameSessionService : Service() {
             "com.zaidnavarro.ds.action.RESTORE_GAME_DPI_SESSION"
         private const val ACTION_RECOVER_SESSION =
             "com.zaidnavarro.ds.action.RECOVER_GAME_DPI_SESSION"
+        private const val ACTION_STOP_RECORDING =
+            "com.zaidnavarro.ds.action.STOP_GAME_RECORDING"
         private const val EXTRA_GAME_PACKAGE = "extra_game_package"
         private const val EXTRA_PRESET = "extra_density_preset"
         private const val EXTRA_BOOSTER_MODE = "extra_booster_mode"
         private const val EXTRA_RESTORE_SOURCE = "extra_restore_source"
+        private const val EXTRA_PROJECTION_RESULT_CODE = "extra_projection_result_code"
+        private const val EXTRA_PROJECTION_DATA = "extra_projection_data"
+        private const val EXTRA_REQUEST_INTERNAL_AUDIO = "extra_request_internal_audio"
 
         const val RESTORE_SOURCE_VOLUME = "volume_gesture"
         const val RESTORE_SOURCE_GAME_EXIT = "game_exit"
@@ -879,15 +1134,18 @@ class DpiGameSessionService : Service() {
         private const val NOTIFICATION_ID = 4102
         private const val REQUEST_OPEN_APP = 4103
         private const val REQUEST_RESTORE = 4104
+        private const val REQUEST_STOP_RECORDING = 4105
 
         const val SESSION_DURATION_SECONDS = 20
         private const val SESSION_DURATION_MILLIS = 20_000L
         private const val COUNTDOWN_UPDATE_MILLIS = 1_000L
+        private const val NOTIFICATION_HEARTBEAT_MILLIS = 5_000L
         private const val DENSITY_SETTLE_MILLIS = 350L
         private const val GAME_WATCH_START_DELAY_MILLIS = 4_000L
         private const val GAME_WATCH_INTERVAL_MILLIS = 1_500L
         private const val GAME_EXIT_CONFIRMATION_SAMPLES = 3
-        private const val GAME_NOT_SEEN_CONFIRMATION_SAMPLES = 8
+        private const val GAME_NOT_SEEN_CONFIRMATION_SAMPLES = 20
+        private const val RECORDING_START_DELAY_MILLIS = 1_200L
         private const val GIBIBYTE = 1_073_741_824.0
 
         private val TRANSIENT_PACKAGES = setOf(
@@ -902,13 +1160,19 @@ class DpiGameSessionService : Service() {
             context: Context,
             game: SupportedGame,
             preset: DensityPreset,
-            boosterMode: BoosterMode? = null
+            boosterMode: BoosterMode? = null,
+            screenCaptureGrant: ScreenCaptureGrant? = null
         ) {
             val intent = Intent(context, DpiGameSessionService::class.java).apply {
                 action = ACTION_START_SESSION
                 putExtra(EXTRA_GAME_PACKAGE, game.packageName)
                 putExtra(EXTRA_PRESET, preset.name)
                 boosterMode?.let { putExtra(EXTRA_BOOSTER_MODE, it.name) }
+                screenCaptureGrant?.let { grant ->
+                    putExtra(EXTRA_PROJECTION_RESULT_CODE, grant.resultCode)
+                    putExtra(EXTRA_PROJECTION_DATA, grant.data)
+                    putExtra(EXTRA_REQUEST_INTERNAL_AUDIO, grant.requestInternalAudio)
+                }
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -932,3 +1196,8 @@ class DpiGameSessionService : Service() {
         }
     }
 }
+
+private data class BatterySnapshot(
+    val percent: Int? = null,
+    val temperatureCelsius: Float? = null
+)

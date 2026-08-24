@@ -31,6 +31,8 @@ interface GameSessionRepository {
 
     suspend fun markSessionActive(restoreAt: Long?)
 
+    suspend fun markGameLaunched(launchedAt: Long)
+
     suspend fun markBoosterActive()
 
     suspend fun markRestorationFailure(message: String)
@@ -63,6 +65,7 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
             preferences[GameSessionPreferenceKeys.selectedPreset] = preset.name
             preferences[GameSessionPreferenceKeys.targetDensity] = preset.density
             preferences[GameSessionPreferenceKeys.sessionStartedAt] = startedAt
+            preferences.remove(GameSessionPreferenceKeys.gameLaunchedAt)
             preferences.remove(GameSessionPreferenceKeys.restoreAt)
             preferences[GameSessionPreferenceKeys.currentSessionStep] =
                 SessionStep.SAVING_DENSITY.name
@@ -111,6 +114,12 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
             preferences[GameSessionPreferenceKeys.currentSessionStep] =
                 SessionStep.SESSION_ACTIVE.name
             preferences.remove(GameSessionPreferenceKeys.errorMessage)
+        }
+    }
+
+    override suspend fun markGameLaunched(launchedAt: Long) {
+        appContext.gameSessionDataStore.edit { preferences ->
+            preferences[GameSessionPreferenceKeys.gameLaunchedAt] = launchedAt
         }
     }
 
@@ -169,6 +178,7 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
             preferences.remove(GameSessionPreferenceKeys.selectedPreset)
             preferences.remove(GameSessionPreferenceKeys.targetDensity)
             preferences.remove(GameSessionPreferenceKeys.sessionStartedAt)
+            preferences.remove(GameSessionPreferenceKeys.gameLaunchedAt)
             preferences.remove(GameSessionPreferenceKeys.restoreAt)
             preferences.remove(GameSessionPreferenceKeys.snapshotPhysicalDensity)
             preferences.remove(GameSessionPreferenceKeys.snapshotEffectiveDensity)
@@ -218,6 +228,7 @@ class GameSessionRepositoryImpl(context: Context) : GameSessionRepository {
             selectedPreset = preset,
             targetDensity = preferences[GameSessionPreferenceKeys.targetDensity],
             sessionStartedAt = preferences[GameSessionPreferenceKeys.sessionStartedAt],
+            gameLaunchedAt = preferences[GameSessionPreferenceKeys.gameLaunchedAt],
             restoreAt = preferences[GameSessionPreferenceKeys.restoreAt],
             currentStep = step,
             snapshot = snapshot,

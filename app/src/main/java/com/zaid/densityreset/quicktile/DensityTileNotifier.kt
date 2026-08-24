@@ -6,11 +6,18 @@ import android.service.quicksettings.TileService
 
 object DensityTileNotifier {
     fun requestRefresh(context: Context) {
-        runCatching {
-            TileService.requestListeningState(
-                context.applicationContext,
-                ComponentName(context.applicationContext, DensityQuickTileService::class.java)
-            )
+        val appContext = context.applicationContext
+        listOf(
+            DensityQuickTileService::class.java,
+            FreeFireQuickTileService::class.java,
+            FreeFireMaxQuickTileService::class.java
+        ).forEach { service ->
+            runCatching {
+                TileService.requestListeningState(
+                    appContext,
+                    ComponentName(appContext, service)
+                )
+            }
         }
     }
 }

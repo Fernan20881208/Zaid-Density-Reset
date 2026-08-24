@@ -1,24 +1,23 @@
-# Signed Release setup
+# Publicación estable firmada
 
-The `Publicar Density Reset` workflow is triggered only by version tags (`v*`). It refuses to publish when signing secrets are missing or when the tag does not exactly match `versionName`.
+`Publicar Density Reset` se ejecuta al hacer push a `main` o manualmente. No publica APKs de debug.
+La firma persistente se obtiene durante GitHub Actions desde la función privada
+`release-signing`, autenticando el workflow con GitHub OIDC (`audience=density-reset-release`). El
+keystore y sus contraseñas no se guardan en el repositorio ni como artefactos.
 
-Configure these GitHub Actions Secrets before creating a release tag:
+## Secuencia actual
 
-- `ANDROID_KEYSTORE_BASE64`: base64 encoding of the existing Density Reset release keystore
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
+1. Incrementar `versionCode` y `versionName` en `app/build.gradle.kts`.
+2. Abrir un PR y esperar que `Compilar APK` complete lint, pruebas, debug y una compilación release
+   minificada sin firma.
+3. Fusionar el PR probado en `main`.
+4. El workflow obtiene la firma mediante OIDC, ejecuta nuevamente pruebas y `assembleRelease`.
+5. Verifica que el certificado del APK coincide con el SHA-256 esperado por el servicio de firma.
+6. Calcula el SHA-256 del APK y crea `update.json` con `mandatory=true` y el `versionCode` actual.
+7. Crea `v<versionName>`, sube APK + metadata a un draft, verifica ambos assets y publica la
+   Release como estable.
 
-The keystore itself must not be committed.
-
-## Release sequence
-
-1. Set a strictly higher Android `versionCode` and the desired `versionName`.
-2. Ensure `public.app_config.latest_version_code` and `min_supported_version_code` reflect the desired policy only when the matching signed Release will be available.
-3. Push/merge the tested code.
-4. Create and push tag `v<versionName>`.
-5. GitHub Actions builds the signed APK, verifies its certificate, calculates SHA-256 and generates `update.json`.
-6. The workflow creates a draft Release containing both the APK and `update.json`.
-7. It verifies both assets exist, then publishes the draft as the latest stable Release.
-
-If a step after draft creation fails, the workflow removes the incomplete draft Release. The Android updater never contains a GitHub PAT or private signing material.
+Si la Release ya existe, el workflow termina sin reemplazarla. Si falla después de crear el draft,
+el draft incompleto se elimina. `public.app_config.latest_version_code` y
+`min_supported_version_code` solo deben cambiarse cuando la Release firmada correspondiente ya
+esté disponible; ese cambio no es necesario para compilar ni revisar el PR.

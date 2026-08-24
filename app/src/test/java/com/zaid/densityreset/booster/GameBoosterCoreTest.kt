@@ -13,15 +13,44 @@ import kotlin.math.abs
 class GameBoosterCoreTest {
 
     @Test
-    fun exposesExactlyFourBoosterModes() {
+    fun keepsExistingModesAndAddsBalancedAndUltraBattery() {
         assertEquals(
             listOf(
                 BoosterMode.GAME,
+                BoosterMode.BALANCED,
                 BoosterMode.BATTERY,
+                BoosterMode.ULTRA_BATTERY,
                 BoosterMode.MAX_PERFORMANCE,
                 BoosterMode.ULTRA_MAX_PERFORMANCE
             ),
             BoosterMode.entries
+        )
+    }
+
+    @Test
+    fun thermalProtectionDowngradesPerformanceModes() {
+        assertEquals(
+            BoosterMode.BALANCED,
+            thermalFallbackMode(
+                BoosterMode.MAX_PERFORMANCE,
+                ThermalLevel.HOT,
+                batteryModeAvailable = true
+            )
+        )
+        assertEquals(
+            BoosterMode.ULTRA_BATTERY,
+            thermalFallbackMode(
+                BoosterMode.ULTRA_MAX_PERFORMANCE,
+                ThermalLevel.VERY_HOT,
+                batteryModeAvailable = true
+            )
+        )
+        assertNull(
+            thermalFallbackMode(
+                BoosterMode.ULTRA_BATTERY,
+                ThermalLevel.VERY_HOT,
+                batteryModeAvailable = true
+            )
         )
     }
 
