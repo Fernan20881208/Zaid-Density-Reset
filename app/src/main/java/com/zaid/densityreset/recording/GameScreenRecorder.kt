@@ -1,6 +1,7 @@
 package com.zaid.densityreset.recording
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
@@ -211,10 +212,7 @@ class GameScreenRecorder(context: Context) {
             )
 
             audioRecord?.let { record ->
-                internalAudioCaptureStarted = runCatching {
-                    record.startRecording()
-                    record.recordingState == AudioRecord.RECORDSTATE_RECORDING
-                }.getOrDefault(false)
+                internalAudioCaptureStarted = startInternalAudio(record)
                 if (internalAudioCaptureStarted) {
                     startAudioInputThread(record)
                 } else {
@@ -240,7 +238,14 @@ class GameScreenRecorder(context: Context) {
         }
 
         @RequiresApi(Build.VERSION_CODES.Q)
+        @SuppressLint("MissingPermission")
         private fun configureInternalAudio() {
+            check(
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            ) { "El permiso de audio fue revocado antes de iniciar la captura interna." }
             val uid = context.packageManager.getApplicationInfo(game.packageName, 0).uid
             val captureConfig = AudioPlaybackCaptureConfiguration.Builder(projection)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
@@ -292,6 +297,22 @@ class GameScreenRecorder(context: Context) {
             audioCodec = codec
         }
 
+        @SuppressLint("MissingPermission")
+        private fun startInternalAudio(record: AudioRecord): Boolean {
+            if (
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return false
+            }
+            return runCatching {
+                record.startRecording()
+                record.recordingState == AudioRecord.RECORDSTATE_RECORDING
+            }.getOrDefault(false)
+        }
+
         private fun startAudioInputThread(record: AudioRecord) {
             val codec = audioCodec ?: return
             audioThread = Thread({
@@ -305,14 +326,17 @@ class GameScreenRecorder(context: Context) {
                         while (!queued && !stopRequested.get()) {
                             val inputIndex = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
                             if (inputIndex >= 0) {
-                                codec.getInputBuffer(inputIndex)?.apply {
-                                    clear()
-                                    put(buffer, 0, read)
-                                }
+                                val input = codec.getInputBuffer(inputIndex)
+                                val queuedBytes = input?.let {
+                                    it.clear()
+                                    minOf(read, it.remaining()).also { size ->
+                                        it.put(buffer, 0, size)
+                                    }
+                                } ?: 0
                                 codec.queueInputBuffer(
                                     inputIndex,
                                     0,
-                                    read,
+                                    queuedBytes,
                                     (System.nanoTime() - startedNanos) / 1_000L,
                                     0
                                 )

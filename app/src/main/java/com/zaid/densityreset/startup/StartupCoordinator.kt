@@ -175,6 +175,14 @@ object StartupCoordinator {
         val session = sessionRepository.read()
         if (!session.sessionActive) return true
 
+        // At BOOSTER_ACTIVE the extreme DPI has already been restored. Restart
+        // the service so it can keep watching the game and later restore the
+        // remaining snapshots, but do not block the app behind the startup gate.
+        if (session.currentStep == SessionStep.BOOSTER_ACTIVE) {
+            DpiGameSessionService.recover(application.applicationContext)
+            return true
+        }
+
         val now = System.currentTimeMillis()
         val expired = session.restoreAt?.let { it <= now } ?: true
         val incomplete = session.currentStep != SessionStep.SESSION_ACTIVE
@@ -182,7 +190,7 @@ object StartupCoordinator {
 
         DpiGameSessionService.recover(application.applicationContext)
         return withTimeoutOrNull(RECOVERY_TIMEOUT_MILLIS) {
-            sessionRepository.state.first { state -> !state.sessionActive }
+            sessionRepository.state.first(::isCriticalDensityResolved)
             true
         } ?: false
     }
@@ -214,3 +222,6 @@ object StartupCoordinator {
 
     private const val RECOVERY_TIMEOUT_MILLIS = 12_000L
 }
+
+internal fun isCriticalDensityResolved(state: com.zaid.densityreset.gameprofile.domain.GameSessionState): Boolean =
+    !state.sessionActive || state.currentStep == SessionStep.BOOSTER_ACTIVE

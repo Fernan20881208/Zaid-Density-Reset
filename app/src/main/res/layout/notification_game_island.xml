@@ -2,18 +2,17 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
     android:background="@drawable/bg_notification_island"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="12dp"
-    android:paddingTop="9dp"
+    android:paddingTop="7dp"
     android:paddingEnd="8dp"
-    android:paddingBottom="9dp">
+    android:paddingBottom="7dp">
 
     <ImageView
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
         android:contentDescription="@null"
         android:src="@drawable/ic_notification_density"
         android:tint="#FF9DEAF4" />
@@ -48,7 +47,7 @@
     <TextView
         android:id="@+id/islandStopRecording"
         android:layout_width="wrap_content"
-        android:layout_height="36dp"
+        android:layout_height="34dp"
         android:gravity="center"
         android:minWidth="42dp"
         android:paddingHorizontal="7dp"
@@ -61,7 +60,7 @@
     <TextView
         android:id="@+id/islandRestore"
         android:layout_width="wrap_content"
-        android:layout_height="36dp"
+        android:layout_height="34dp"
         android:gravity="center"
         android:minWidth="48dp"
         android:paddingHorizontal="7dp"

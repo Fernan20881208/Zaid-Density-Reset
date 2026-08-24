@@ -383,6 +383,7 @@ class DpiGameSessionService : Service() {
             boosterManager.recoverIfNeeded()
         }
         if (game != null) startGameWatcher(game)
+        startNotificationHeartbeat()
 
         if (session.currentStep == SessionStep.BOOSTER_ACTIVE) {
             updateSessionNotification(session, null)

@@ -912,7 +912,7 @@ private fun GameCard(
                             title = "Grabar pantalla",
                             detail = when {
                                 systemAccess?.mediaProjectionAvailable != true -> "No disponible"
-                                systemAccess?.internalAudioCaptureAvailable == true -> "Video + audio interno compatible; micrófono apagado"
+                                systemAccess.internalAudioCaptureAvailable -> "Video + audio interno compatible; micrófono apagado"
                                 else -> "Video; Android pedirá audio interno si es compatible"
                             },
                             checked = state.automation.screenRecordingEnabled,

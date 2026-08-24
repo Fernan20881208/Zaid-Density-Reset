@@ -81,15 +81,13 @@ class GameEnvironmentManager(context: Context) {
                     false
                 )
             } else {
+                snapshot = snapshot.copy(dndApplied = true)
+                snapshotStore.save(snapshot)
                 val applied = runCatching {
                     notificationManager?.setInterruptionFilter(
                         NotificationManager.INTERRUPTION_FILTER_PRIORITY
                     )
                 }.isSuccess
-                if (applied) {
-                    snapshot = snapshot.copy(dndApplied = true)
-                    snapshotStore.save(snapshot)
-                }
                 actions += GameEnvironmentAction(
                     "No molestar",
                     if (applied) "Prioridad activa durante la sesión" else "Android rechazó el cambio",
@@ -108,6 +106,11 @@ class GameEnvironmentManager(context: Context) {
                     false
                 )
             } else {
+                // Persist the restoration intent before the first system write.
+                // If the process dies between the two brightness writes, recovery
+                // still restores both values from this snapshot.
+                snapshot = snapshot.copy(brightnessApplied = true)
+                snapshotStore.save(snapshot)
                 val modeWritten = Settings.System.putInt(
                     resolver,
                     Settings.System.SCREEN_BRIGHTNESS_MODE,
@@ -118,10 +121,6 @@ class GameEnvironmentManager(context: Context) {
                     Settings.System.SCREEN_BRIGHTNESS,
                     percentToSystemBrightness(preference.normalizedBrightnessPercent)
                 )
-                if (modeWritten || valueWritten) {
-                    snapshot = snapshot.copy(brightnessApplied = true)
-                    snapshotStore.save(snapshot)
-                }
                 actions += GameEnvironmentAction(
                     "Brillo",
                     if (modeWritten && valueWritten) {
@@ -144,15 +143,13 @@ class GameEnvironmentManager(context: Context) {
                     false
                 )
             } else {
+                snapshot = snapshot.copy(rotationApplied = true)
+                snapshotStore.save(snapshot)
                 val applied = Settings.System.putInt(
                     resolver,
                     Settings.System.ACCELEROMETER_ROTATION,
                     0
                 )
-                if (applied) {
-                    snapshot = snapshot.copy(rotationApplied = true)
-                    snapshotStore.save(snapshot)
-                }
                 actions += GameEnvironmentAction(
                     "Rotación",
                     if (applied) "Bloqueada durante la sesión" else "Android rechazó el cambio",
@@ -167,6 +164,8 @@ class GameEnvironmentManager(context: Context) {
             if (manager == null || previous == null) {
                 actions += GameEnvironmentAction("Volumen", "No disponible", false)
             } else {
+                snapshot = snapshot.copy(mediaVolumeApplied = true)
+                snapshotStore.save(snapshot)
                 val applied = runCatching {
                     manager.setStreamVolume(
                         AudioManager.STREAM_MUSIC,
@@ -177,10 +176,6 @@ class GameEnvironmentManager(context: Context) {
                         0
                     )
                 }.isSuccess
-                if (applied) {
-                    snapshot = snapshot.copy(mediaVolumeApplied = true)
-                    snapshotStore.save(snapshot)
-                }
                 actions += GameEnvironmentAction(
                     "Volumen multimedia",
                     if (applied) {
